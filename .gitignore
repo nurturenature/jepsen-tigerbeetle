@@ -4,6 +4,7 @@ pom.xml.asc
 *.class
 /lib/
 /classes/
+/store/
 /target/
 /checkouts/
 .lein-deps-sum
@@ -12,3 +13,6 @@ pom.xml.asc
 .lein-failures
 .nrepl-port
 .cpcache/
+.clj-kondo/
+.lsp/
+.vscode/
