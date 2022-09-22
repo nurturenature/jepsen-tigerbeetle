@@ -2,18 +2,18 @@
   (:require
    [clojure.string :as str]
    [clojure.tools.logging :refer [info]]
-   [tigerbeetle
-    [bank :as bank]
-    [db :as db]]
    [jepsen
-    [cli :as cli]
     [checker :as checker]
+    [cli :as cli]
     [generator :as gen]
     [net :as net]
     [tests :as tests]]
-   [jepsen.nemesis.combined :as nc]
    [jepsen.checker.timeline :as timeline]
-   [jepsen.os.debian :as debian]))
+   [jepsen.nemesis.combined :as nc]
+   [jepsen.os.debian :as debian]
+   [tigerbeetle
+    [bank :as bank]
+    [db :as db]]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
@@ -129,7 +129,9 @@
                           :timeline   (timeline/html)
                           :stats      (checker/stats)
                           :exceptions (checker/unhandled-exceptions)
-                          :logs       (checker/log-file-pattern #":TODO" :TODO)})
+                          ; too many error messages as cluster forms to be useful
+                          ;logs       (checker/log-file-pattern #"error" db/log-file)
+                          })
             :logging    {:overrides
                          ;; TODO: how to turn off SLF4J logging?
                          {"io.netty.util.internal.InternalThreadLocalMap" :off
@@ -200,7 +202,11 @@
    [nil "--rate HZ" "Target number of ops/sec"
     :default  10
     :parse-fn read-string
-    :validate validate-non-neg]])
+    :validate validate-non-neg]
+
+   [nil "--update-tigerbeetle? BOOLEAN" "Update TigerBeetle from git and rebuild."
+    :default false
+    :parse-fn boolean]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of tests:

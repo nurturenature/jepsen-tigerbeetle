@@ -30,9 +30,11 @@ We will be following the same steps as the tutorial but using TigerBeetle vs etc
 
 ----
 
-Now that we can run a no-op test, lets create functions to install/start/stop/etc TigerBeetle.
+## Current Status
 
-[Database Automation](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/02-db.md) in the tutorial.
+Now that we can bring up a TigerBeetle cluster, lets create a client for TigerBeetle.
+
+[Writing a Client](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/03-client.md) in the tutorial.
 
 ----
 
@@ -40,7 +42,17 @@ Now that we can run a no-op test, lets create functions to install/start/stop/et
 
 (Follows tutorial. Reverse chronological order.)
 
-The Jepsen [test scaffolding](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/01-scaffolding.md) was setup in [PR]().
+### [Database Automation](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/02-db.md)
+
+Jepsen's DB protocol was [implemented for TigerBeetle](https://github.com/nurturenature/jepsen-tigerbeetle/blob/main/src/tigerbeetle/db.clj).
+
+- can install/remove, start/kill, pause/resume TigerBeetle
+  - individual node or cluster 
+- snarfs log files from each node
+
+----
+
+### The Jepsen [test scaffolding](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/01-scaffolding.md) was setup in [PR](https://github.com/nurturenature/jepsen-tigerbeetle/commit/44f5ca213aed97b0add265e3e07b42b84e74d28d)
 
 We'll be using:
 
