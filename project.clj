@@ -3,7 +3,8 @@
   :url "https://github.com/jepsen-tigerbeetle"
   :license {:name "Licensed under the Apache License, Version 2.0"
             :url "http://www.apache.org/licenses/LICENSE-2.0"}
-  :dependencies [[org.clojure/clojure "1.11.1"]
+  :dependencies [[com.tigerbeetle/tigerbeetle-java "0.0.1-SNAPSHOT"]
+                 [org.clojure/clojure "1.11.1"]
                  [jepsen "0.2.8-SNAPSHOT"]]
   :main tigerbeetle.core
   :repl-options {:init-ns tigerbeetle.core}

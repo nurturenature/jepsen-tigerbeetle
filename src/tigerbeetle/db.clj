@@ -1,13 +1,14 @@
 (ns tigerbeetle.db
-  (:require [clojure.string :refer [join]]
-            [clojure.tools.logging :refer [warn]]
+  (:require [clojure.tools.logging :refer [info warn]]
             [jepsen
              [db :as db]
              [control :as c]]
             [jepsen.control
-             [net :as cn]
              [util :as cu]]
-            [jepsen.os.debian :as deb]))
+            [jepsen.os.debian :as deb]
+            [tigerbeetle
+             [bank :as bank]
+             [tigerbeetle :as tb]]))
 
 (def root     "/root")
 (def tb-dir   (str root "/tigerbeetle"))
@@ -15,36 +16,6 @@
 (def pid-path (str tb-dir "/tigerbeetle.pid"))
 (def log-file "tigerbeetle.log")
 (def log-path (str tb-dir "/" log-file))
-
-(def tb-cluster
-  "TigerBeetle Cluster number."
-  0)
-
-(def tb-port
-  "TigerBeetle port."
-  3000)
-
-(defn tb-replica
-  "Return the TigerBeetle replica number for the node."
-  [node]
-  (- (->> node
-          (re-find #"\d")
-          read-string)
-     1))
-
-(defn tb-data
-  "Return name of the TigerBeetle data file for the node."
-  [node]
-  (str tb-cluster "_" (tb-replica node) ".tigerbeetle"))
-
-(defn tb-addresses
-  "Return a comma separated string of all TigerBeetle nodes, ip:port, in the cluster."
-  [nodes]
-  (->> nodes
-       sort
-       (map (fn [node]
-              (str (cn/ip node) ":" tb-port)))
-       (join ",")))
 
 (defn db
   "TigerBeetle."
@@ -69,11 +40,12 @@
       ; create the TigerBeetle data file
       (c/su
        (c/cd tb-dir
+             (c/exec :rm :-rf (tb/tb-data node))
              (c/exec tb-bin
                      :format
-                     (str "--cluster=" tb-cluster)
-                     (str "--replica=" (tb-replica node))
-                     (tb-data node))))
+                     (str "--cluster=" tb/tb-cluster)
+                     (str "--replica=" (tb/tb-replica node))
+                     (tb/tb-data node))))
 
       ; start TigerBeetle
       (db/start! this test node)
@@ -86,21 +58,24 @@
 
       ; rm TigerBeetle data, log files
       (c/su
-       (c/exec :rm :-rf (str tb-dir "/" (tb-data node)))
-       (c/exec :rm :-rf log-path))
+       (c/cd tb-dir
+             (c/exec :rm :-rf (tb/tb-data node))
+             (c/exec :rm :-rf log-path)))
 
       (warn "Leaving TigerBeetle source, build, at: " tb-dir))
 
+    db/Primary
+    ; TODO
     ; TigerBeetle doesn't have "primaries".
     ; We'll use them to mean "leader'."
-    ;; db/Primary
-    ;; ; TODO
-    ;; (primaries [_db test]
-    ;;   (:nodes test))
+    (primaries [_db test]
+      (:nodes test))
 
-    ;; (setup-primary! [_db _test _node]
-    ;;   ; TODO: add accounts
-    ;;   )
+    ; TigerBeetle doesn't have "primaries".
+    ; Used to initialize database by setting up accounts.
+    (setup-primary! [_db test _node]
+      (info "Creating accounts: " (:accounts test))
+      (bank/create-accounts test))
 
     db/LogFiles
     (log-files [_db _test _node]
@@ -118,8 +93,8 @@
              :pidfile pid-path}
             tb-bin
             :start
-            (str "--addresses=" (tb-addresses nodes))
-            (tb-data node)))
+            (str "--addresses=" (tb/tb-addresses nodes))
+            (tb/tb-data node)))
           :started)))
 
     (kill! [_this _test _node]
