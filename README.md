@@ -43,22 +43,15 @@ And now that we have a client, running a simple test of `:read`s and `:transfer`
 :ok	:read	{1 -3, 2 3}
 ```
 
-### We found our first bug!
-
-```
-Jepsen starting  /root/tigerbeetle/tigerbeetle start --addresses=192.168.122.101:3000 0_0.tigerbeetle
-info(io): opening "0_0.tigerbeetle"...
-info(main): 0: cluster=0: listening on 192.168.122.101:3000
-info(message_bus): connection from client 317247975010753124847524919045321411137
-error(storage): short read: buffer.len=706953216 offset=65536 bytes_read=0
-thread 840 panic: data file inode size was truncated or corrupted
-```
-
-Doing a sequence of transactions with the Java client will crash the database.
+### We found an intentional limitation of the API while the storage layer is being developed. 🙂
 
 Opened issue: [Multiple operations, ~10, using the Java client crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/issues/9)
 
-PR to demonstrate bug in integration tests: [Enhance integration tests to do multiple account create/lookups to crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/pull/10)
+PR to demonstrate behavior in integration tests: [Enhance integration tests to do multiple account create/lookups to crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/pull/10)
+
+And it was confirmed by the development team.
+
+### So we'll take a pause and check back when development progresses...
 
 ----
 
