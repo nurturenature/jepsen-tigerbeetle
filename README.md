@@ -32,9 +32,29 @@ We will be following the same steps as the tutorial but using TigerBeetle vs etc
 
 ## Current Status
 
-Now that we can bring up a TigerBeetle cluster, lets create a client for TigerBeetle.
+And now that we have a client, running a simple test of `:read`s and `:transfer`s:
 
-[Writing a Client](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/03-client.md) in the tutorial.
+```clj
+:invoke	:transfer	{:from 2, :to 1, :amount 3}
+:ok	:transfer	{:from 2, :to 1, :amount 3}
+:invoke	:transfer	{:from 1, :to 2, :amount 2}
+:ok	:transfer	{:from 1, :to 2, :amount 2}
+:invoke	:read	nil
+:ok	:read	{1 -3, 2 3}
+```
+
+### We found our first bug!
+
+```
+Jepsen starting  /root/tigerbeetle/tigerbeetle start --addresses=192.168.122.101:3000 0_0.tigerbeetle
+info(io): opening "0_0.tigerbeetle"...
+info(main): 0: cluster=0: listening on 192.168.122.101:3000
+info(message_bus): connection from client 317247975010753124847524919045321411137
+error(storage): short read: buffer.len=706953216 offset=65536 bytes_read=0
+thread 840 panic: data file inode size was truncated or corrupted
+```
+
+Doing a sequence of transactions with the Java client will crash the database.
 
 ----
 
@@ -42,6 +62,20 @@ Now that we can bring up a TigerBeetle cluster, lets create a client for TigerBe
 
 (Follows tutorial. Reverse chronological order.)
 
+### [Writing a Client](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/03-client.md).
+
+Using the [tigerbeetle-java](https://github.com/tigerbeetledb/tigerbeetle-java) client, a Jepsen [bank client](https://github.com/nurturenature/jepsen-tigerbeetle/blob/main/src/tigerbeetle/bank.clj) was created.
+
+The client is used to create the accounts at database setup.
+
+It can `:read` accounts and `:transfer` amounts between accounts.
+
+The `checker` insures:
+  - all totals match
+  - `:negative-balances?` is respected
+  - stats and plots 
+
+----
 ### [Database Automation](https://github.com/jepsen-io/jepsen/blob/main/doc/tutorial/02-db.md)
 
 Jepsen's DB protocol was [implemented for TigerBeetle](https://github.com/nurturenature/jepsen-tigerbeetle/blob/main/src/tigerbeetle/db.clj).

@@ -75,10 +75,7 @@
        " " (:workload opts)
        " " (if (empty? (:nemesis opts))
              (str ":no-faults")
-             (str (seq (:nemesis opts))))
-       (if (:negative-balances? opts)
-         (str " negative-balances")
-         (str ""))))
+             (str (seq (:nemesis opts))))))
 
 (defn tigerbeetle-test
   "Given an options map from the command line runner (e.g. :nodes, :ssh,
@@ -90,7 +87,6 @@
                 total-amount
                 accounts]
          :as workload} ((workloads workload-name) opts)
-        _             (info "workload: " workload)
         package       (nc/nemesis-package
                        {:db        db
                         :nodes     (:nodes opts)
@@ -180,13 +176,13 @@
     :parse-fn keyword
     :validate [workloads (cli/one-of workloads)]]])
 
-; TODO: :max-transfer  5
-;       :total-amount  100
-;       :accounts      (vec (range 8))
 (def cli-opts
   "Additional command line options."
-  [[nil "--negative-balances? BOOLEAN" "Allow negative balances?"
-    :default false
+  [[nil "--accounts [1,2,...]" "Vector of account numbers."
+    :parse-fn read-string]
+
+   [nil "--negative-balances? BOOLEAN" "Allow negative balances?"
+    :default true
     :parse-fn boolean]
 
    [nil "--nemesis-interval SECONDS" "How long to wait between nemesis faults."
