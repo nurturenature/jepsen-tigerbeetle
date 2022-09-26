@@ -56,6 +56,10 @@ thread 840 panic: data file inode size was truncated or corrupted
 
 Doing a sequence of transactions with the Java client will crash the database.
 
+Opened issue: [Multiple operations, ~10, using the Java client crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/issues/9)
+
+PR to demonstrate bug in integration tests: [Enhance integration tests to do multiple account create/lookups to crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/pull/10)
+
 ----
 
 ## Change Log
