@@ -11,7 +11,8 @@
              [tigerbeetle :as tb]]))
 
 (def root     "/root")
-(def tb-dir   (str root "/tigerbeetle"))
+(def tb-dir   (str root   "/tigerbeetle"))
+(def data-dir (str tb-dir "/data"))
 (def tb-bin   (str tb-dir "/tigerbeetle"))
 (def pid-path (str tb-dir "/tigerbeetle.pid"))
 (def log-file "tigerbeetle.log")
@@ -40,12 +41,13 @@
       ; create the TigerBeetle data file
       (c/su
        (c/cd tb-dir
-             (c/exec :rm :-rf (tb/tb-data node))
+             (c/exec :rm :-rf data-dir)
+             (c/exec :mkdir :-p data-dir)
              (c/exec tb-bin
                      :format
                      (str "--cluster=" tb/tb-cluster)
                      (str "--replica=" (tb/tb-replica node))
-                     (tb/tb-data node))))
+                     (str data-dir "/" (tb/tb-data node)))))
 
       ; start TigerBeetle
       (db/start! this test node)
@@ -59,7 +61,7 @@
       ; rm TigerBeetle data, log files
       (c/su
        (c/cd tb-dir
-             (c/exec :rm :-rf (tb/tb-data node))
+             (c/exec :rm :-rf data-dir)
              (c/exec :rm :-rf log-path)))
 
       (warn "Leaving TigerBeetle source, build, at: " tb-dir))
@@ -94,7 +96,7 @@
             tb-bin
             :start
             (str "--addresses=" (tb/tb-addresses nodes))
-            (tb/tb-data node)))
+            (str data-dir "/" (tb/tb-data node))))
           :started)))
 
     (kill! [_this _test _node]

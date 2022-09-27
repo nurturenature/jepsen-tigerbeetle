@@ -1,7 +1,6 @@
 (ns tigerbeetle.core
   (:require
    [clojure.string :as str]
-   [clojure.tools.logging :refer [info]]
    [jepsen
     [checker :as checker]
     [cli :as cli]
@@ -101,9 +100,11 @@
                         :pause     {:targets (:db-targets opts)}
                         :kill      {:targets (:db-targets opts)}
                         :file-corruption {:targets     (:db-targets opts)
-                                          :corruptions [{:type :bitflip :file ":TODO"
+                                          :corruptions [{:type :bitflip
+                                                         :file db/data-dir
                                                          :probability {:distribution :one-of :values [1e-2 1e-3 1e-4]}}
-                                                        {:type :truncate :file ":TODO"
+                                                        {:type :truncate
+                                                         :file db/data-dir
                                                          :drop {:distribution :geometric :p 1e-3}}]}
                         :interval  (:nemesis-interval opts)})]
 
@@ -126,12 +127,8 @@
                           :stats      (checker/stats)
                           :exceptions (checker/unhandled-exceptions)
                           ; too many error messages as cluster forms to be useful
-                          ;logs       (checker/log-file-pattern #"error" db/log-file)
-                          })
-            :logging    {:overrides
-                         ;; TODO: how to turn off SLF4J logging?
-                         {"io.netty.util.internal.InternalThreadLocalMap" :off
-                          "io.netty.util.internal.logging.InternalLoggerFactory" :off}}})))
+                          ; logs       (checker/log-file-pattern #"error" db/log-file)
+                          })})))
 
 (def validate-non-neg
   [#(and (number? %) (not (neg? %))) "Must be non-negative"])
