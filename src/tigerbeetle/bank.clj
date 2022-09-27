@@ -41,7 +41,7 @@
   client/Client
   (open! [this {:keys [nodes] :as _test} node]
     (info "BankClient/open (" node "): " (tb/tb-replica-addresses nodes))
-    (let [conn  (u/timeout 100 :timeout
+    (let [conn  (u/timeout tb/tb-timeout :timeout
                            (new-tb-client nodes))]
       (if (= :timeout conn)
         (throw+ [:client-open node :error :timeout])
@@ -64,7 +64,7 @@
                                    (.setCode            1)
                                    (.setAmount          amount)
                                    (.setLedger          tb/tb-ledger))
-                        result (u/timeout 100 :timeout
+                        result (u/timeout tb/tb-timeout :timeout
                                           (.createTransfer conn transfer))]
                     (cond
                       (= result (CreateTransferResult/Ok))
@@ -85,10 +85,10 @@
         :read (let [batch (into-array UUID (map (fn [account]
                                                   (UUID. 0 account))
                                                 accounts))
-                    accounts (u/timeout 100 :timeout
+                    accounts (u/timeout tb/tb-timeout :timeout
                                         (.lookupAccounts conn batch))]
                 (cond
-                  (nil? accounts)
+                  (= :timeout accounts)
                   ; TODO
                   (throw+ [:read accounts :error :timeout])
                   ;; (assoc op
