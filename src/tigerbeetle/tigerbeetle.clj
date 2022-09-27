@@ -42,3 +42,7 @@
 (def tb-ledger
   "TigerBeetle ledger."
   720)
+
+(def tb-timeout
+  "Timeout value in ms for Tigerbeetle transactions."
+  500)
