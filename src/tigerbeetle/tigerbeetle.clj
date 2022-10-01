@@ -99,24 +99,21 @@
 
 (defn lookup-accounts
   "Takes a sequence of accounts and looks them up in TigerBeetle.
-   Returns a map of `{account total ...}`."
+   Returns a lazy sequence of `{:id :credits-posted :debits-posted}`
+   for the accounts that were found."
   [client accounts]
-  (let [batch (IdBatch. (count accounts))
-        _     (doseq [account accounts]
-                (.add batch)
-                (.setId batch account 0))
-        results (.lookupAccounts client batch)
-        results (repeatedly (.getLength results)
-                            (fn []
-                              (.next results)
-                              (let [id  (.getId results UInt128/LeastSignificant)
-                                    amt (- (.getCreditsPosted results)
-                                           (.getDebitsPosted  results))]
-                                [id amt])))]
-    (->> results
-         (reduce (fn [acc [id amt]]
-                   (assoc acc id amt))
-                 {}))))
+  (when (seq accounts)
+    (let [batch (IdBatch. (count accounts))
+          _     (doseq [account accounts]
+                  (.add batch)
+                  (.setId batch account 0))
+          results (.lookupAccounts client batch)]
+      (repeatedly (.getLength results)
+                  (fn []
+                    (.next results)
+                    {:id             (.getId results UInt128/LeastSignificant)
+                     :credits-posted (.getCreditsPosted results)
+                     :debits-posted  (.getDebitsPosted  results)})))))
 
 (defn create-transfers
   "Takes a sequence of transfers and creates them in TigerBeetle.
