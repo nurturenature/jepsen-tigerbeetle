@@ -11,8 +11,8 @@
    [jepsen.nemesis.combined :as nc]
    [jepsen.os.debian :as debian]
    [tigerbeetle
-    [bank :as bank]
-    [db :as db]]))
+    [db :as db]]
+   [tigerbeetle.workloads.bank :as bank]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
