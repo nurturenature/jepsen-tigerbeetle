@@ -7,8 +7,10 @@
             [jepsen.tests.bank :as jbank]
             [slingshot.slingshot :refer [throw+]]
             [tigerbeetle.tigerbeetle :as tb])
-  (:import (com.tigerbeetle Account AccountsBatch Client CreateTransferResult Transfer)
-           (java.util UUID)))
+  (:import (com.tigerbeetle AccountBatch Client IdBatch TransferBatch UInt128)))
+
+; TODO: use flags.linked for linked transactions
+; TODO: use flags.pending for pending transactions
 
 (defn new-tb-client
   "Create a new TigerBeetle client for the cluster of nodes.
@@ -16,26 +18,88 @@
   [nodes]
   (Client. tb/tb-cluster (into-array String (tb/tb-replica-addresses nodes))))
 
+(defn close-tb-client
+  "Closes a TigerBeetle client."
+  [client]
+  (.close client))
+
+(defn with-tb-client
+  "Creates a TigerBeetle client for the given nodes,
+   passes it to `(f client & args), closes client, and returns the results."
+  [nodes f & args]
+  (let [client  (new-tb-client nodes)
+        results (apply f client args)]
+    (close-tb-client client)
+    results))
+
 (defn create-accounts
-  "Create accounts in TigerBeetle cluster."
-  [{:keys [nodes accounts] :as _test}]
-  (let [client (new-tb-client nodes)
-        batch  (AccountsBatch. (count accounts))
-        _      (doseq [account accounts]
-                 (let [account (doto (Account.)
-                                 (.setId     (UUID. 0 account))
-                                 (.setCode   100)
-                                 (.setLedger tb/tb-ledger))]
-                   (.add batch account)))
-        errors (.createAccounts client batch)
-        errors (areduce errors idx ret {}
-                        (let [error   (aget errors idx)
-                              account (get accounts (.index error))
-                              msg     (.result error)]
-                          (assoc ret account msg)))]
-    (.close client)
-    (when (seq errors)
-      (throw+ [:errors errors :accounts accounts]))))
+  "Takes a seq of accounts to create in TigerBeetle.
+   Returns a lazy sequence of any errors `{account error}`."
+  [client accounts]
+  (let [batch (AccountBatch. (count accounts))
+        _     (doseq [account accounts]
+                (.add batch)
+                (.setId     batch account 0)
+                (.setCode   batch tb/tb-code)
+                (.setLedger batch tb/tb-ledger))
+        errors (.createAccounts client batch)]
+    (repeatedly (.getLength errors)
+                (fn []
+                  (.next errors)
+                  (let [i (.getIndex errors)
+                        r (.getResult errors)
+                        a (do (.setPosition batch i)
+                              (.getId batch UInt128/LeastSignificant))]
+                    {a r})))))
+
+(defn lookup-accounts
+  "Takes a sequence of accounts and looks them up in TigerBeetle.
+   Returns a map of `{account total ...}`."
+  [client accounts]
+  (let [batch (IdBatch. (count accounts))
+        _     (doseq [account accounts]
+                (.add batch)
+                (.setId batch account 0))
+        results (.lookupAccounts client batch)
+        results (repeatedly (.getLength results)
+                            (fn []
+                              (.next results)
+                              (let [id  (.getId results UInt128/LeastSignificant)
+                                    amt (- (.getCreditsPosted results)
+                                           (.getDebitsPosted  results))]
+                                [id amt])))]
+    (->> results
+         (reduce (fn [acc [id amt]]
+                   (assoc acc id amt))
+                 {}))))
+
+(defn create-transfers
+  "Takes a sequence of transfers and creates them in TigerBeetle.
+   Returns a lazy sequence of any errors `{:id :error :from :to :amount}`."
+  [client transfers]
+  (let [batch (TransferBatch. (count transfers))
+        _     (doseq [{:keys [from to amount] :as _transfer} transfers]
+                (.add batch)
+                ; TODO: create linked transfers
+                (.setId              batch (u/rand-distribution {:min 1, :max 1e+8}) 0)
+                (.setCreditAccountId batch to 0)
+                (.setDebitAccountId  batch from 0)
+                (.setCode            batch tb/tb-code)
+                (.setAmount          batch amount)
+                (.setLedger          batch tb/tb-ledger))
+        errors (.createTransfers client batch)]
+    (repeatedly (.getLength errors)
+                (fn []
+                  (.next errors)
+                  (let [i (.getIndex  errors)
+                        r (.getResult errors)]
+                    (.setPosition batch i)
+                    {:id     (.getId              batch UInt128/LeastSignificant)
+                     :error  r
+                     :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
+                     :to     (.getCreditAccountId batch UInt128/LeastSignificant)
+                     :amount (.getAmount          batch)})))))
+
 
 (defrecord BankClient [conn]
   client/Client
@@ -56,39 +120,29 @@
   (invoke! [{:keys [conn] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
     (let [op (assoc op :node (:node conn))]
       (case f
-        :transfer (let [{:keys [from to amount]} value
-                        transfer (doto (Transfer.)
-                                   (.setId              (random-uuid))
-                                   (.setCreditAccountId (UUID. 0 to))
-                                   (.setDebitAccountId  (UUID. 0 from))
-                                   (.setCode            1)
-                                   (.setAmount          amount)
-                                   (.setLedger          tb/tb-ledger))
-                        result (u/timeout tb/tb-timeout :timeout
-                                          (.createTransfer conn transfer))]
+        :transfer (let [errors (u/timeout tb/tb-timeout :timeout
+                                          (create-transfers conn [value]))]
                     (cond
-                      (= result (CreateTransferResult/Ok))
-                      (assoc op :type :ok)
-
-                      (= result :timeout)
+                      (= errors :timeout)
                       ; TODO
                       (throw+ [:transfer value :error :timeout])
                       ;; (assoc op
                       ;;        :type  :info
                       ;;        :error :timeout)
 
-                      :else
+                      (seq errors)
+                      ; TODO: info or errors?
                       (assoc op
                              :type  :info
-                             :error (.toString result))))
+                             :error errors)
 
-        :read (let [batch (into-array UUID (map (fn [account]
-                                                  (UUID. 0 account))
-                                                accounts))
-                    accounts (u/timeout tb/tb-timeout :timeout
-                                        (.lookupAccounts conn batch))]
+                      :else
+                      (assoc op :type :ok)))
+
+        :read (let [results (u/timeout tb/tb-timeout :timeout
+                                       (lookup-accounts conn accounts))]
                 (cond
-                  (= :timeout accounts)
+                  (= :timeout results)
                   ; TODO
                   (throw+ [:read accounts :error :timeout])
                   ;; (assoc op
@@ -96,24 +150,16 @@
                   ;;        :value :timeout)
 
                   :else
-                  (let [accounts (areduce accounts idx ret {}
-                                          (let [account (get accounts idx)
-                                                id      (->> account
-                                                             .getId
-                                                             .getLeastSignificantBits)
-                                                amt     (- (.getCreditsPosted account)
-                                                           (.getDebitsPosted  account))]
-                                            (assoc ret id amt)))]
-                    (assoc op
-                           :type :ok
-                           :value accounts)))))))
+                  (assoc op
+                         :type :ok
+                         :value results))))))
 
   (teardown! [_this _test]
     ; no-op
     )
 
   (close! [{:keys [conn] :as _this} _test]
-    (.close conn)))
+    (close-tb-client conn)))
 
 (defn workload
   "Constructs a workload:

@@ -75,9 +75,9 @@
 
     ; TigerBeetle doesn't have "primaries".
     ; Used to initialize database by setting up accounts.
-    (setup-primary! [_db test _node]
-      (info "Creating accounts: " (:accounts test))
-      (bank/create-accounts test))
+    (setup-primary! [_db {:keys [nodes accounts] :as _test} _node]
+      (info "Creating accounts: " accounts)
+      (bank/with-tb-client nodes bank/create-accounts accounts))
 
     db/LogFiles
     (log-files [_db _test _node]

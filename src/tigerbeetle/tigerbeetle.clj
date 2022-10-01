@@ -39,6 +39,10 @@
        tb-replica-addresses
        (join ",")))
 
+(def tb-code
+  "User defined category."
+  42)
+
 (def tb-ledger
   "TigerBeetle ledger."
   720)
