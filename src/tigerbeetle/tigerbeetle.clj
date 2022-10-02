@@ -78,69 +78,69 @@
     results))
 
 (defn create-accounts
-  "Takes a seq of accounts to create in TigerBeetle.
+  "Takes a seq of accounts to create in a TigerBeetle ledger.
    Returns a lazy sequence of any errors `{account error}`."
-  [client accounts]
-  (let [batch (AccountBatch. (count accounts))
-        _     (doseq [account accounts]
-                (.add batch)
-                (.setId     batch account 0)
-                (.setCode   batch tb-code)
-                (.setLedger batch tb-ledger))
-        errors (.createAccounts client batch)]
-    (repeatedly (.getLength errors)
-                (fn []
-                  (.next errors)
-                  (let [i (.getIndex errors)
-                        r (.getResult errors)
-                        a (do (.setPosition batch i)
-                              (.getId batch UInt128/LeastSignificant))]
-                    {a r})))))
+  ([client accounts] (create-accounts client accounts tb-ledger))
+  ([client accounts ledger]
+   (when (seq accounts)
+     (let [batch (AccountBatch. (count accounts))
+           _     (doseq [account accounts]
+                   (.add batch)
+                   (.setId     batch account 0)
+                   (.setCode   batch tb-code)
+                   (.setLedger batch ledger))
+           errors (.createAccounts client batch)]
+       (repeatedly (.getLength errors)
+                   (fn []
+                     (.next errors)
+                     (let [i (.getIndex errors)
+                           r (.getResult errors)
+                           a (do (.setPosition batch i)
+                                 (.getId batch UInt128/LeastSignificant))]
+                       {a r})))))))
 
 (defn lookup-accounts
   "Takes a sequence of accounts and looks them up in TigerBeetle.
-   Returns a map of `{account total ...}`."
+   Returns a lazy sequence of `{:id :credits-posted :debits-posted}`
+   for the accounts that were found."
   [client accounts]
-  (let [batch (IdBatch. (count accounts))
-        _     (doseq [account accounts]
-                (.add batch)
-                (.setId batch account 0))
-        results (.lookupAccounts client batch)
-        results (repeatedly (.getLength results)
-                            (fn []
-                              (.next results)
-                              (let [id  (.getId results UInt128/LeastSignificant)
-                                    amt (- (.getCreditsPosted results)
-                                           (.getDebitsPosted  results))]
-                                [id amt])))]
-    (->> results
-         (reduce (fn [acc [id amt]]
-                   (assoc acc id amt))
-                 {}))))
+  (when (seq accounts)
+    (let [batch (IdBatch. (count accounts))
+          _     (doseq [account accounts]
+                  (.add batch)
+                  (.setId batch account 0))
+          results (.lookupAccounts client batch)]
+      (repeatedly (.getLength results)
+                  (fn []
+                    (.next results)
+                    {:id             (.getId results UInt128/LeastSignificant)
+                     :credits-posted (.getCreditsPosted results)
+                     :debits-posted  (.getDebitsPosted  results)})))))
 
 (defn create-transfers
   "Takes a sequence of transfers and creates them in TigerBeetle.
    Returns a lazy sequence of any errors `{:id :error :from :to :amount}`."
   [client transfers]
-  (let [batch (TransferBatch. (count transfers))
-        _     (doseq [{:keys [from to amount] :as _transfer} transfers]
-                (.add batch)
-                ; TODO: create linked transfers
-                (.setId              batch (u/rand-distribution {:min 1, :max 1e+8}) 0)
-                (.setCreditAccountId batch to 0)
-                (.setDebitAccountId  batch from 0)
-                (.setCode            batch tb-code)
-                (.setAmount          batch amount)
-                (.setLedger          batch tb-ledger))
-        errors (.createTransfers client batch)]
-    (repeatedly (.getLength errors)
-                (fn []
-                  (.next errors)
-                  (let [i (.getIndex  errors)
-                        r (.getResult errors)]
-                    (.setPosition batch i)
-                    {:id     (.getId              batch UInt128/LeastSignificant)
-                     :error  r
-                     :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
-                     :to     (.getCreditAccountId batch UInt128/LeastSignificant)
-                     :amount (.getAmount          batch)})))))
+  (when (seq transfers)
+    (let [batch (TransferBatch. (count transfers))
+          _     (doseq [{:keys [from to amount] :as _transfer} transfers]
+                  (.add batch)
+                ; TODO: create linked/pending transfers
+                  (.setId              batch (u/rand-distribution {:min 1, :max 1e+8}) 0)
+                  (.setCreditAccountId batch to 0)
+                  (.setDebitAccountId  batch from 0)
+                  (.setCode            batch tb-code)
+                  (.setAmount          batch amount)
+                  (.setLedger          batch tb-ledger))
+          errors (.createTransfers client batch)]
+      (repeatedly (.getLength errors)
+                  (fn []
+                    (.next errors)
+                    (let [i (.getIndex  errors)
+                          r (.getResult errors)]
+                      (.setPosition batch i)
+                      {:id     (.getId              batch UInt128/LeastSignificant)
+                       :error  r
+                       :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
+                       :to     (.getCreditAccountId batch UInt128/LeastSignificant)
+                       :amount (.getAmount          batch)}))))))

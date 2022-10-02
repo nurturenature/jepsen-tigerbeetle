@@ -60,9 +60,13 @@
                   ;;        :value :timeout)
 
                   :else
-                  (assoc op
-                         :type :ok
-                         :value results))))))
+                  (let [results (->> results
+                                     (reduce (fn [acc {:keys [id credits-posted debits-posted]}]
+                                               (assoc acc id (- credits-posted debits-posted)))
+                                             {}))]
+                    (assoc op
+                           :type :ok
+                           :value results)))))))
 
   (teardown! [_this _test]
     ; no-op
