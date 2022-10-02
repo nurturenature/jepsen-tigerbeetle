@@ -12,11 +12,13 @@
    [jepsen.os.debian :as debian]
    [tigerbeetle
     [db :as db]]
-   [tigerbeetle.workloads.bank :as bank]))
+   [tigerbeetle.workloads.bank :as bank]
+   [tigerbeetle.workloads.set-full :as set-full]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
-  {:bank bank/workload})
+  {:bank     bank/workload
+   :set-full set-full/workload})
 
 (def nemeses
   "The types of faults our nemesis can produce"
