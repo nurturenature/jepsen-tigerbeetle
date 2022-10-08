@@ -11,5 +11,5 @@
   :plugins [[lein-codox "0.10.8"]
             [lein-localrepo "0.5.4"]]
   :codox {:output-path "target/doc/"
-          :source-uri "https://github.com/nurturenature/tigerbeetle/tree/main/{filepath}#L{line}"
+          :source-uri "../../{filepath}#L{line}"
           :metadata {:doc/format :markdown}})
