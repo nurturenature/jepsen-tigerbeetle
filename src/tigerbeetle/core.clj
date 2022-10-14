@@ -73,12 +73,14 @@
 
 (defn test-name
   "Meaningful test name."
-  [opts]
+  [{:keys [nodes workload nemesis tigerbeetle-debug?] :as _opts}]
   (str "TigerBeetle"
-       " " (:workload opts)
-       " " (if (empty? (:nemesis opts))
+       " (" (count nodes) "x)"
+       " " workload
+       " " (if (not (seq nemesis))
              (str ":no-faults")
-             (str (seq (:nemesis opts))))))
+             (str (seq nemesis)))
+       (if tigerbeetle-debug? " :debug" "")))
 
 (defn tigerbeetle-test
   "Given an options map from the command line runner (e.g. :nodes, :ssh,
@@ -180,7 +182,13 @@
 (def cli-opts
   "Additional command line options."
   [[nil "--accounts [1,2,...]" "Vector of account numbers."
+    :default (vec (range 1 9))
     :parse-fn read-string]
+
+   [nil "--db-targets TARGETS" "A comma-separated list of nodes to target for db operations; e.g. one,all"
+    :default (vec db-targets)
+    :parse-fn parse-comma-kws
+    :validate [(partial every? db-targets) (cli/one-of db-targets)]]
 
    [nil "--negative-balances? BOOLEAN" "Allow negative balances?"
     :default true
@@ -200,6 +208,10 @@
     :default  10
     :parse-fn read-string
     :validate validate-non-neg]
+
+   [nil "--tigerbeetle-debug? BOOLEAN" "Install Tigerbeetle with debugging."
+    :default false
+    :parse-fn parse-boolean]
 
    [nil "--update-tigerbeetle? BOOLEAN" "Update TigerBeetle from git and rebuild."
     :default false

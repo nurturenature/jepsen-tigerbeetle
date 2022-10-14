@@ -52,7 +52,7 @@
 
 (def tb-timeout
   "Timeout value in ms for Tigerbeetle transactions."
-  500)
+  1000)
 
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions

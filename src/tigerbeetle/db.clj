@@ -16,26 +16,30 @@
 (def pid-path (str tb-dir "/tigerbeetle.pid"))
 (def log-file "tigerbeetle.log")
 (def log-path (str tb-dir "/" log-file))
+(def tb-git   "https://github.com/tigerbeetledb/tigerbeetle.git")
 
 (defn db
   "TigerBeetle."
   [_version]
   (reify db/DB
-    (setup! [this {:keys [update-tigerbeetle?] :as test} node]
+    (setup! [this {:keys [update-tigerbeetle? tigerbeetle-debug?] :as test} node]
       (when (or (not (cu/file? tb-bin))
                 update-tigerbeetle?)
        ; pull or clone from github, run build script
         (deb/install [:git] [:--assume-yes])
         (c/su
          (if (cu/exists? (str tb-dir "/.git"))
-           (c/cd tb-dir
-                 (c/exec :git :pull :--no-rebase))
-           (c/cd root
-                 (c/exec :rm :-f "tigerbeetle")
-                 (c/exec :git :clone "https://github.com/tigerbeetledb/tigerbeetle.git")))
+           (do (info "Updating existing " tb-dir " with git pull")
+               (c/cd tb-dir
+                     (c/exec :git :pull :--no-rebase)))
+           (do (info "Cloning " tb-git " with git clone")
+               (c/cd root
+                     (c/exec :rm :-f "tigerbeetle")
+                     (c/exec :git :clone tb-git))))
+         (info "Building TigerBeetle from source at " tb-dir " " (if tigerbeetle-debug? :--debug ""))
          (c/cd tb-dir
                ; all changes are isolated to tb-dir
-               (c/exec "scripts/install.sh"))))
+               (c/exec "scripts/install.sh" (if tigerbeetle-debug? :--debug "")))))
 
       ; create the TigerBeetle data file
       (c/su
@@ -52,7 +56,7 @@
       (db/start! this test node)
 
       ; TODO: sleep needed?
-      (Thread/sleep 1000))
+      (Thread/sleep 5000))
 
     (teardown! [this test node]
       (db/kill! this test node)
