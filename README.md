@@ -90,12 +90,22 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
-### We found an intentional limitation of the API while the storage layer is being developed. 🙂
+### TigerBeetle is making good progress.
 
-Opened issue: [Multiple operations, ~10, using the Java client crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/issues/9)
+We can now run a straightforward relatively low rate test end-to-end.
 
-PR to demonstrate behavior in integration tests: [Enhance integration tests to do multiple account create/lookups to crash the server.](https://github.com/tigerbeetledb/tigerbeetle-java/pull/10)
+Here's one replica with one client and no faults:
 
-And it was confirmed by the development team.
+![1x1 no-faults latency raw](doc/images/1x1-no-faults-latency-raw.png)
 
-### So we'll take a pause and check back when development progresses...
+Increasing to 3 replicas and 3 clients periodically causes timeouts:
+
+![3x3 no-faults latency raw](doc/images/3x3-no-faults-latency-raw.png)
+
+And in both cases the latency distribution is *very* patterned.  Maybe it means something? 🤔
+
+### So we'll take a pause and check back when either we learn something new about the timeout behavior, or TigerBeetle development progresses...
+
+----
+
+### (P.S. It's premature to partition or introduce other faults. Doing so results in an un-runnable test.)
