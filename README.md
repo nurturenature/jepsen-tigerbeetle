@@ -109,3 +109,28 @@ And in both cases the latency distribution is *very* patterned.  Maybe it means 
 ----
 
 ### (P.S. It's premature to partition or introduce other faults. Doing so results in an un-runnable test.)
+
+***But*** after reading [A Database Without Dynamic Memory Allocation](https://tigerbeetle.com/blog/a-database-without-dynamic-memory/):
+
+> Messages contain a checksum to detect random bit flips.
+>  
+> ...
+> 
+> When combined with assertions, static allocation is a force multiplier for fuzzing! 
+
+ had to try some file corrupting bit-flipping:
+
+```clj
+:bitflip {"n3" {:file "/root/tigerbeetle/data",
+                :probability 0.01}}
+```
+ 
+ and checksums FTW!
+
+```
+error(superblock): quorum: checksum=5049e012706e7b6148fc22259365415 parent=2667ef9fa317bccf04938708b745b0d2 sequence=2 count=1 valid=false
+thread 5736 panic: superblock parent quorum lost
+/root/tigerbeetle/src/vsr/superblock.zig:1530:21: 0x30c19f in vsr.superblock.SuperBlockType(storage.Storage).read_sector_callback (tigerbeetle)
+                    return error.ParentQuorumLost;
+                    ^
+```
