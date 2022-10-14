@@ -27,8 +27,8 @@
     ; no-op
     )
 
-  (invoke! [{:keys [conn] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
-    (let [op (assoc op :node (:node conn))]
+  (invoke! [{:keys [conn node] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
+    (let [op (assoc op :node node)]
       (case f
         :transfer (let [errors (u/timeout tb/tb-timeout :timeout
                                           (tb/create-transfers conn [value]))]

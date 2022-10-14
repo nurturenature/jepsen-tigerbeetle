@@ -12,15 +12,16 @@
    [jepsen.os.debian :as debian]
    [tigerbeetle
     [db :as db]]
-   [tigerbeetle.tests.ledger :as ledger]
+   [tigerbeetle.tests.cycle
+    [g-counter :as g-counter]]
    [tigerbeetle.workloads.bank :as bank]
    [tigerbeetle.workloads.set-full :as set-full]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
-  {:bank     bank/workload
-   :set-full set-full/workload
-   :ledger   ledger/workload})
+  {:bank      bank/workload
+   :set-full  set-full/workload
+   :g-counter g-counter/workload})
 
 (def nemeses
   "The types of faults our nemesis can produce"
@@ -73,12 +74,14 @@
 
 (defn test-name
   "Meaningful test name."
-  [opts]
+  [{:keys [nodes workload nemesis tigerbeetle-debug?] :as _opts}]
   (str "TigerBeetle"
-       " " (:workload opts)
-       " " (if (empty? (:nemesis opts))
+       " (" (count nodes) "x)"
+       " " workload
+       " " (if (not (seq nemesis))
              (str ":no-faults")
-             (str (seq (:nemesis opts))))))
+             (str (seq nemesis)))
+       (if tigerbeetle-debug? " :debug" "")))
 
 (defn tigerbeetle-test
   "Given an options map from the command line runner (e.g. :nodes, :ssh,
@@ -131,6 +134,7 @@
                           :stats      (checker/stats)
                           :exceptions (checker/unhandled-exceptions)
                           ; too many error messages as cluster forms to be useful
+                          ; TODO: panic
                           ; logs       (checker/log-file-pattern #"error" db/log-file)
                           })})))
 
@@ -180,7 +184,13 @@
 (def cli-opts
   "Additional command line options."
   [[nil "--accounts [1,2,...]" "Vector of account numbers."
+    :default (vec (range 1 9))
     :parse-fn read-string]
+
+   [nil "--db-targets TARGETS" "A comma-separated list of nodes to target for db operations; e.g. one,all"
+    :default (vec db-targets)
+    :parse-fn parse-comma-kws
+    :validate [(partial every? db-targets) (cli/one-of db-targets)]]
 
    [nil "--negative-balances? BOOLEAN" "Allow negative balances?"
     :default true
@@ -201,9 +211,13 @@
     :parse-fn read-string
     :validate validate-non-neg]
 
+   [nil "--tigerbeetle-debug? BOOLEAN" "Install Tigerbeetle with debugging."
+    :default false
+    :parse-fn parse-boolean]
+
    [nil "--update-tigerbeetle? BOOLEAN" "Update TigerBeetle from git and rebuild."
     :default false
-    :parse-fn boolean]])
+    :parse-fn parse-boolean]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of tests:
