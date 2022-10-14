@@ -12,15 +12,16 @@
    [jepsen.os.debian :as debian]
    [tigerbeetle
     [db :as db]]
-   [tigerbeetle.tests.ledger :as ledger]
+   [tigerbeetle.tests.cycle
+    [g-counter :as g-counter]]
    [tigerbeetle.workloads.bank :as bank]
    [tigerbeetle.workloads.set-full :as set-full]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
-  {:bank     bank/workload
-   :set-full set-full/workload
-   :ledger   ledger/workload})
+  {:bank      bank/workload
+   :set-full  set-full/workload
+   :g-counter g-counter/workload})
 
 (def nemeses
   "The types of faults our nemesis can produce"
@@ -133,6 +134,7 @@
                           :stats      (checker/stats)
                           :exceptions (checker/unhandled-exceptions)
                           ; too many error messages as cluster forms to be useful
+                          ; TODO: panic
                           ; logs       (checker/log-file-pattern #"error" db/log-file)
                           })})))
 
@@ -215,7 +217,7 @@
 
    [nil "--update-tigerbeetle? BOOLEAN" "Update TigerBeetle from git and rebuild."
     :default false
-    :parse-fn boolean]])
+    :parse-fn parse-boolean]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of tests:
