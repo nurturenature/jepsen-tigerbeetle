@@ -17,29 +17,42 @@
 (def log-file "tigerbeetle.log")
 (def log-path (str tb-dir "/" log-file))
 (def tb-git   "https://github.com/tigerbeetledb/tigerbeetle.git")
+(def tb-zig-conf (str tb-dir "/src/config.zig"))
 
 (defn db
   "TigerBeetle."
   [_version]
   (reify db/DB
-    (setup! [this {:keys [update-tigerbeetle? tigerbeetle-debug?] :as test} node]
-      (when (or (not (cu/file? tb-bin))
-                update-tigerbeetle?)
-       ; pull or clone from github, run build script
-        (deb/install [:git] [:--assume-yes])
-        (c/su
-         (if (cu/exists? (str tb-dir "/.git"))
-           (do (info "Updating existing " tb-dir " with git pull")
-               (c/cd tb-dir
-                     (c/exec :git :pull :--no-rebase)))
-           (do (info "Cloning " tb-git " with git clone")
-               (c/cd root
-                     (c/exec :rm :-f "tigerbeetle")
-                     (c/exec :git :clone tb-git))))
-         (info "Building TigerBeetle from source at " tb-dir " " (if tigerbeetle-debug? :--debug ""))
-         (c/cd tb-dir
-               ; all changes are isolated to tb-dir
-               (c/exec "scripts/install.sh" (if tigerbeetle-debug? :--debug "")))))
+    (setup! [this {:keys [tigerbeetle-debug? tigerbeetle-log-level tigerbeetle-update] :as test} node]
+      (let [actions (cond-> {}
+                      (not (cu/exists? tb-dir)) (assoc :git "head"
+                                                       :install true)
+                      (not (cu/file? tb-bin))   (assoc :install true)
+                      tigerbeetle-debug?    (assoc :debug     true
+                                                   :install   true)
+                      tigerbeetle-log-level (assoc :log-level tigerbeetle-log-level
+                                                   :install   true)
+                      tigerbeetle-update    (assoc :git       tigerbeetle-update
+                                                   :install   true))]
+        (when (seq actions)
+          (info "Installing TigerBeetle: " actions)
+          (deb/install [:git] [:--assume-yes])
+          (c/su
+           (c/exec :mkdir :-p tb-dir)
+           (c/cd tb-dir
+                 (when (not (cu/exists? :.git))
+                   (c/exec :git :clone tb-git))
+                 (when (:git actions)
+                   (c/exec :git :pull :--no-rebase tb-git :main)
+                   (c/exec :git :switch :--detach (:git actions)))
+                 (when (:log-level actions)
+                   (c/exec :sed :-i
+                           (str "s/^pub const log_level = .*/pub const log_level = " (:log-level actions) ";/")
+                           tb-zig-conf))
+                 (when (:install actions) (c/exec "scripts/install.sh" (if tigerbeetle-debug? :--debug "")))
+                 (info "git status: " (->> (c/exec :git :status :--short :--branch) line-seq vec))
+                 (info "log-level: " (c/exec :grep "pub const log_level" tb-zig-conf))
+                 (info "tigerBeetle debug / bin: " (boolean tigerbeetle-debug?) " / " (c/exec :ls :-l tb-bin))))))
 
       ; create the TigerBeetle data file
       (c/su

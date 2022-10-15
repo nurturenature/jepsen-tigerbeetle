@@ -74,13 +74,14 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis tigerbeetle-debug?] :as _opts}]
+  [{:keys [nodes workload nemesis tigerbeetle-update tigerbeetle-debug? concurrency] :as _opts}]
   (str "TigerBeetle"
-       " (" (count nodes) "x)"
+       " (" (count nodes) "r-" concurrency "c)"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
              (str (seq nemesis)))
+       (if tigerbeetle-update (str " :git-" tigerbeetle-update) "")
        (if tigerbeetle-debug? " :debug" "")))
 
 (defn tigerbeetle-test
@@ -120,6 +121,7 @@
             :total-amount total-amount
             :accounts     accounts}
            opts
+           {:plot {:nemeses (:perf package)}}
            {:name       (test-name opts)
             :os         debian/os
             :db         db
@@ -212,12 +214,16 @@
     :validate validate-non-neg]
 
    [nil "--tigerbeetle-debug? BOOLEAN" "Install Tigerbeetle with debugging."
-    :default false
+    ; :default false
     :parse-fn parse-boolean]
 
-   [nil "--update-tigerbeetle? BOOLEAN" "Update TigerBeetle from git and rebuild."
-    :default false
-    :parse-fn parse-boolean]])
+   [nil "--tigerbeetle-log-level INT" "Configure Tigerbeetle log-level before installing."
+    ; :default 3 ; 2 is normal, 3 is more logging
+    :parse-fn parse-long]
+
+   [nil "--tigerbeetle-update GIT-REVISION" "Update TigerBeetle from git at the revision and install."
+    ; :default "main"
+    ]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of tests:
