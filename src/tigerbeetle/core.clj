@@ -74,13 +74,14 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis tigerbeetle-update tigerbeetle-debug? concurrency] :as _opts}]
+  [{:keys [nodes workload nemesis rate tigerbeetle-update tigerbeetle-debug? concurrency] :as _opts}]
   (str "TigerBeetle"
        " (" (count nodes) "r-" concurrency "c)"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
              (str (seq nemesis)))
+       (if (not= 10 rate) (str " :rate-" rate) "")
        (if tigerbeetle-update (str " :git-" tigerbeetle-update) "")
        (if tigerbeetle-debug? " :debug" "")))
 
