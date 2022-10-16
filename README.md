@@ -94,17 +94,19 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 We can now run a straightforward relatively low rate test end-to-end.
 
-Here's one replica with one client and no faults:
+### Here's one replica with one client and no faults:
 
 ![1x1 no-faults latency raw](doc/images/1x1-no-faults-latency-raw.png)
 
-Increasing to 3 replicas and 3 clients periodically causes timeouts:
+### Increasing to 3 replicas and 8 clients shows a clear latency wave pattern:
 
-![3x3 no-faults latency raw](doc/images/3x3-no-faults-latency-raw.png)
+![3x8 no-faults latency raw](doc/images/3X8-no-faults-latency-raw.png)
 
-And in both cases the latency distribution is *very* patterned.  Maybe it means something? 🤔
+Doing a range of different replica and client counts shows the latency distribution is *very* patterned.  Maybe it means something? 🤔
 
-### So we'll take a pause and check back when either we learn something new about the timeout behavior, or TigerBeetle development progresses...
+And (total # of operations / # waves) is **always** ~ 128! 🤯
+
+### So we'll take a pause and check back when either we learn something new about the latency behavior, or TigerBeetle development progresses...
 
 ----
 
