@@ -102,15 +102,17 @@ We can now run a straightforward relatively low rate test end-to-end.
 
 ![3x8 no-faults latency raw](doc/images/3X8-no-faults-latency-raw.png)
 
-Doing a range of different replica and client counts shows the latency distribution is *very* patterned.  Maybe it means something? 🤔
+Doing a range of different replica and client counts shows the latency distribution is *very* patterned,
+latency spikes/cycles ~128 operations,
+and correlates to WAL checkpoint messages in the log.
 
-And (total # of operations / # waves) is **always** ~ 128! 🤯
+Seemed worthy of an issue, [latency spike/cycle every ~128 operations, correlates with: replica: on_request: ignoring op=... (too far ahead, checkpoint=...)](https://github.com/tigerbeetledb/tigerbeetle/issues/205) and it's a known issue.
 
-### So we'll take a pause and check back when either we learn something new about the latency behavior, or TigerBeetle development progresses...
+### So, for now, let's start testing with a 3 replica, 5 client environment and see what we can learn...
 
 ----
 
-### (P.S. It's premature to partition or introduce other faults. Doing so results in an un-runnable test.)
+### (P.S. It's premature to partition or introduce other faults too heavily, doing so results in an un-runnable test.)
 
 ***But*** after reading [A Database Without Dynamic Memory Allocation](https://tigerbeetle.com/blog/a-database-without-dynamic-memory/):
 

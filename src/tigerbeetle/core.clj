@@ -82,7 +82,7 @@
              (str ":no-faults")
              (str (seq nemesis)))
        (if (not= 10 rate) (str " :rate-" rate) "")
-       (if tigerbeetle-update (str " :git-" tigerbeetle-update) "")
+       (if tigerbeetle-update (str " :git-" (subs tigerbeetle-update 0 (min 8 (count tigerbeetle-update)))) "")
        (if tigerbeetle-debug? " :debug" "")))
 
 (defn tigerbeetle-test
