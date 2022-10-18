@@ -6,7 +6,7 @@
              [checker :as checker]
              [generator :as gen]]
             [tigerbeetle.workloads.bank :as tbank]
-            [jellepsen.tests.cycle.g-counter :as jellepsen]))
+            [jellepsen.tests.cycle.og-counter :as jellepsen]))
 
 (defn g-counter-generator
   "Wraps a bank generator to shape :transfer ops so history :read values are monotonic."
