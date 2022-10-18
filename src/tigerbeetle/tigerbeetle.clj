@@ -2,7 +2,8 @@
   (:require [clojure.string :refer [join]]
             [jepsen
              [util :as u]]
-            [jepsen.control.net :as cn])
+            [jepsen.control.net :as cn]
+            [slingshot.slingshot :refer [try+]])
   (:import (com.tigerbeetle AccountBatch Client IdBatch TransferBatch UInt128)))
 
 (def tb-cluster
@@ -59,9 +60,12 @@
 
 (defn new-tb-client
   "Create a new TigerBeetle client for the cluster of nodes.
-  It is a new java Object."
+  Returns a new java Object or `:no-client`."
   [nodes]
-  (Client. tb-cluster (into-array String (tb-replica-addresses nodes))))
+  (try+
+   (Client. tb-cluster (into-array String (tb-replica-addresses nodes)))
+   (catch [] {}
+     :no-client)))
 
 (defn close-tb-client
   "Closes a TigerBeetle client."

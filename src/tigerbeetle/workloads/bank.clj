@@ -18,7 +18,10 @@
     (let [conn  (u/timeout tb/tb-timeout :timeout
                            (tb/new-tb-client nodes))]
       (if (= :timeout conn)
-        (throw+ [:client-open node :error :timeout])
+        (assoc this
+               :conn  :no-client
+               :error :timeout
+               :node  node)
         (assoc this
                :conn conn
                :node node))))
@@ -34,14 +37,12 @@
                                           (tb/create-transfers conn [value]))]
                     (cond
                       (= errors :timeout)
-                      ; TODO
-                      (throw+ [:transfer value :error :timeout])
-                      ;; (assoc op
-                      ;;        :type  :info
-                      ;;        :error :timeout)
+                      (assoc op
+                             :type  :info
+                             :error :timeout)
 
                       (seq errors)
-                      ; TODO: info or errors?
+                      ; TODO: may be able to :fail?
                       (assoc op
                              :type  :info
                              :error errors)
@@ -53,11 +54,9 @@
                                        (tb/lookup-accounts conn accounts))]
                 (cond
                   (= :timeout results)
-                  ; TODO
-                  (throw+ [:read accounts :error :timeout])
-                  ;; (assoc op
-                  ;;        :type :info
-                  ;;        :value :timeout)
+                  (assoc op
+                         :type  :info
+                         :error :timeout)
 
                   :else
                   (let [results (->> results
