@@ -4,13 +4,13 @@
 
 ## Why TigerBeetle?
 
-- sound grounding in research
+- solidly grounded in research
 - test culture
 - devs are helpful in the chat
 
 ## Why Jepsen?
 
-TigerBeetle does [similar testing](https://github.com/tigerbeetledb/viewstamped-replication-made-famous) during development, so why try Jepsen?
+TigerBeetle is [meaningfully tested](https://github.com/tigerbeetledb/viewstamped-replication-made-famous) during development, so why try Jepsen?
 
 Jepsen is [good](http://jepsen.io/analyses):
 
@@ -18,7 +18,7 @@ Jepsen is [good](http://jepsen.io/analyses):
 - real environmental faults
 - existing tests and models evolved by finding bugs and increasing understanding time and time again
 
-My personal belief is that Jepsen's the map is not the territory and highly adapted property generators will find a bug. Even in a meaningfully tested system like TigerBeetle. I also think that it will be necessary to enhance the existing bank test to be most fruitful. Let's see what we can learn...
+The thesis is that Jepsen's [the map is not the territory](https://en.wikipedia.org/wiki/Map%E2%80%93territory_relation) black-boxing combined with its highly adapted property generators will be useful in contributing to TigerBeetle's development, serving to experientially validate and learn from the existing tests. The extensive existing testing will also necessitate enhancing the existing bank test to be most fruitful. Let's see what we can learn...
 
 ----
 
@@ -52,7 +52,8 @@ Uses Jepsen's [bank test](https://jepsen-io.github.io/jepsen/jepsen.tests.bank.h
 Jepsen's bank `checker` insures:
   - all totals match
   - `:negative-balances?` is respected
-  - stats and plots 
+  - stats and plots
+  - [snapshot isolation](http://jepsen.io/consistency/models/snapshot-isolation) level of consistency
 
 ----
   
@@ -90,6 +91,35 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
+Now that we can run longer tests, let's run a test until it fails:
+
+```
+debug(tree): Transfer.id: compact_start: op=4295 snapshot=4293 beat=4/4
+debug(tree): Transfer.id: compact_tick() for immutable table to level 0
+thread 1361 panic: reached unreachable code
+/root/tigerbeetle/zig/lib/std/debug.zig:225:14: 0x269bcb in std.debug.assert (tigerbeetle)
+    if (!ok) unreachable; // assertion failure
+             ^
+/root/tigerbeetle/src/lsm/compaction.zig:450:19: 0x48b380 in lsm.compaction.CompactionType(lsm.table.TableType(u128,lsm.groove.IdTreeValue,lsm.groove.IdTreeValue.compare_keys,lsm.groove.IdTreeValue.key_from_value,554112867134706473364364839029663282043,lsm.groove.IdTreeValue.tombstone,lsm.groove.IdTreeValue.tombstone_from_key),storage.Storage,lsm.table_immutable.TableImmutableIteratorType).cpu_merge_start (tigerbeetle)
+            assert(!compaction.data.writable);
+```
+
+And it turns out this was also found by TigerBeetle's LSM fuzzers: [lsm_forest_fuzz](https://github.com/tigerbeetledb/tigerbeetle/issues/183).
+
+**How wonderful! 🎉**
+
+LSM fuzzers found a state that would be found in the wild by an application.
+
+Experientially fuzzing TigerBeetle using the Java client was able to fuzz into the unreachable state.
+
+It's mutually affirming!
+
+### We'll check back in when the [bug fix](https://github.com/tigerbeetledb/tigerbeetle/pull/177) lands in `main`.
+
+----
+
+## Experience Log
+
 ### TigerBeetle is making good progress.
 
 We can now run a straightforward relatively low rate test end-to-end.
@@ -108,7 +138,7 @@ and correlates to WAL checkpoint messages in the log.
 
 Seemed worthy of an issue, [latency spike/cycle every ~128 operations, correlates with: replica: on_request: ignoring op=... (too far ahead, checkpoint=...)](https://github.com/tigerbeetledb/tigerbeetle/issues/205) and it's a known issue.
 
-### So, for now, let's start testing with a 3 replica, 5 client environment and see what we can learn...
+### So, for now, we'll be testing with a 3 replica, 3-5 client environment and see what we can learn.
 
 ----
 
