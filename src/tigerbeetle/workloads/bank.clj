@@ -97,6 +97,7 @@
                         (gen/log "No quiesce...")
                         (gen/log "Final reads...")
                         (->> jbank/read
+                             (gen/map (fn [op] (assoc op :final? true)))
                              (gen/once)
                              (gen/each-thread)
                              (gen/clients)))})))
