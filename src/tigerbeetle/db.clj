@@ -6,8 +6,7 @@
             [jepsen.control
              [util :as cu]]
             [jepsen.os.debian :as deb]
-            [tigerbeetle
-             [tigerbeetle :as tb]]))
+            [tigerbeetle.tigerbeetle :as tb]))
 
 (def root     "/root")
 (def tb-dir   (str root   "/tigerbeetle"))
@@ -72,6 +71,10 @@
       (Thread/sleep 5000))
 
     (teardown! [this test node]
+      ; TODO: no good place to do this?
+      ; OK it's being done on each node
+      (tb/drain-client-pool)
+
       (db/kill! this test node)
 
       ; rm TigerBeetle data, log files
@@ -90,10 +93,13 @@
       (:nodes test))
 
     ; TigerBeetle doesn't have "primaries".
-    ; Used to initialize database by setting up accounts.
-    (setup-primary! [_db {:keys [nodes accounts] :as _test} _node]
+    ; Used to initialize database by setting up accounts,
+    ; creating a pool of clients
+    (setup-primary! [_db {:keys [accounts] :as test} _node]
+      (let [num-clients (tb/fill-client-pool test)]
+        (info "Created client pool of " num-clients))
       (info "Creating accounts: " accounts)
-      (tb/with-tb-client nodes tb/create-accounts accounts))
+      (tb/with-tb-client tb/create-accounts accounts))
 
     db/LogFiles
     (log-files [_db _test _node]

@@ -11,7 +11,8 @@
    [jepsen.nemesis.combined :as nc]
    [jepsen.os.debian :as debian]
    [tigerbeetle
-    [db :as db]]
+    [db :as db]
+    [tigerbeetle :as tb]]
    [tigerbeetle.tests.cycle
     [g-counter :as g-counter]]
    [tigerbeetle.workloads.bank :as bank]
@@ -74,9 +75,9 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis rate tigerbeetle-update tigerbeetle-debug? concurrency] :as _opts}]
+  [{:keys [nodes workload nemesis rate tigerbeetle-update tigerbeetle-debug? concurrency] :as opts}]
   (str "TigerBeetle"
-       " (" (count nodes) "r-" concurrency "c)"
+       " (" (count nodes) "r-" (tb/num-tb-clients opts) "c-" concurrency "w)"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
@@ -136,10 +137,7 @@
                           :timeline   (timeline/html)
                           :stats      (checker/stats)
                           :exceptions (checker/unhandled-exceptions)
-                          ; too many error messages as cluster forms to be useful
-                          ; TODO: panic
-                          ; logs       (checker/log-file-pattern #"error" db/log-file)
-                          })})))
+                          :logs       (checker/log-file-pattern #"panic\:" db/log-file)})})))
 
 (def validate-non-neg
   [#(and (number? %) (not (neg? %))) "Must be non-negative"])
@@ -220,6 +218,10 @@
 
    [nil "--tigerbeetle-log-level INT" "Configure Tigerbeetle log-level before installing."
     ; :default 3 ; 2 is normal, 3 is more logging
+    :parse-fn parse-long]
+
+   [nil "--tigerbeetle-num-clients INT" "How many TigerBeetle clients to create and use in a pool."
+    ; :default is --concurrency
     :parse-fn parse-long]
 
    [nil "--tigerbeetle-update GIT-REVISION" "Update TigerBeetle from git at the revision and install."

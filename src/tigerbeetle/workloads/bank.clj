@@ -15,8 +15,9 @@
   client/Client
   (open! [this {:keys [nodes] :as _test} node]
     (info "BankClient/open (" node "): " (tb/tb-replica-addresses nodes))
-    (let [conn  (u/timeout tb/tb-timeout :timeout
-                           (tb/new-tb-client nodes))]
+    (let [conn  ; (u/timeout tb/tb-timeout :timeout
+                ;            (tb/new-tb-client nodes))
+          :pool-placeholder]
       (if (= :timeout conn)
         (assoc this
                :conn  :no-client
@@ -31,7 +32,11 @@
     )
 
   (invoke! [{:keys [conn node] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
-    (let [op (assoc op :node node)]
+    (assert (= :pool-placeholder conn))
+    (let [[idx conn] (tb/rand-tb-client)
+          op (assoc op
+                    :node node
+                    :client idx)]
       (case f
         :transfer (let [errors (u/timeout tb/tb-timeout :timeout
                                           (tb/create-transfers conn [value]))]
@@ -72,7 +77,9 @@
     )
 
   (close! [{:keys [conn] :as _this} _test]
-    (tb/close-tb-client conn)))
+    (assert (= :pool-placeholder conn))
+    ; no-op
+    ))
 
 (defn workload
   "Constructs a workload:

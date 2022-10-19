@@ -3,7 +3,8 @@
             [jepsen
              [util :as u]]
             [jepsen.control.net :as cn]
-            [slingshot.slingshot :refer [try+]])
+            [slingshot.slingshot :refer [try+]]
+            [jepsen.client :as client])
   (:import (com.tigerbeetle AccountBatch Client IdBatch TransferBatch UInt128)))
 
 (def tb-cluster
@@ -60,25 +61,59 @@
 
 (defn new-tb-client
   "Create a new TigerBeetle client for the cluster of nodes.
-  Returns a new java Object or `:no-client`."
+  Returns a new java Object or nil if client could not be created."
   [nodes]
   (try+
    (Client. tb-cluster (into-array String (tb-replica-addresses nodes)))
    (catch [] {}
-     :no-client)))
+     nil)))
 
 (defn close-tb-client
   "Closes a TigerBeetle client."
   [client]
-  (.close client))
+  (try+
+   (.close client)
+   (catch [] {})))
+
+(defn num-tb-clients
+  "How many TigerBeetle clients should be in this test."
+  [{:keys [tigerbeetle-num-clients concurrency] :as _test}]
+  (or tigerbeetle-num-clients concurrency 3))
+
+(def tb-client-pool
+  "A sorted map, [id client], of TigerBeetle clients as an Atom."
+  (atom (sorted-map)))
+
+(defn fill-client-pool
+  "Create TigerBeetle clients and put them in the pool.
+   Returns the number of clients created."
+  [{:keys [nodes] :as test}]
+  (let [num-clients (num-tb-clients test)]
+    (dotimes [i num-clients]
+      (let [client (new-tb-client nodes)]
+        (when client
+          (swap! tb-client-pool assoc i client))))
+    (count @tb-client-pool)))
+
+(defn drain-client-pool
+  "Closes every client and removes it from the pool."
+  []
+  (doseq [[idx client] @tb-client-pool]
+    (u/timeout 1000 :timeout (close-tb-client client))
+    (swap! tb-client-pool dissoc idx)))
+
+(defn rand-tb-client
+  "Returns a random TigerBeetle client from the pool as [id client].
+   Clients are multithreaded and may be shared."
+  []
+  (->> @tb-client-pool seq rand-nth))
 
 (defn with-tb-client
-  "Creates a TigerBeetle client for the given nodes,
-   passes it to `(f client & args), closes client, and returns the results."
-  [nodes f & args]
-  (let [client  (new-tb-client nodes)
-        results (apply f client args)]
-    (close-tb-client client)
+  "Using a random TigerBeetle client,
+   passes it to `(f client & args), and returns the results."
+  [f & args]
+  (let [[_ client] (rand-tb-client)
+        results    (apply f client args)]
     results))
 
 (defn create-accounts
@@ -98,7 +133,7 @@
                    (fn []
                      (.next errors)
                      (let [i (.getIndex errors)
-                           r (.getResult errors)
+                           r (.toString (.getResult errors))
                            a (do (.setPosition batch i)
                                  (.getId batch UInt128/LeastSignificant))]
                        {a r})))))))
