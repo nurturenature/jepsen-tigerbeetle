@@ -91,33 +91,23 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
-There are some panics that `jepsen-tigerbeetle` is finding that may be new:
+There are some panics and cluster unavailability that `jepsen-tigerbeetle` is finding that are new.
+
+An issue has been opened, [random transactions (w/no environmental faults) can panic or cause the replica to become unavailable](https://github.com/tigerbeetledb/tigerbeetle/issues/215).
+
 
 ```
-/root/tigerbeetle/src/vsr/replica.zig:4501:19: 0x34634b in vsr.replica.ReplicaType(state_machine.StateMachineType(storage.Storage),message_bus.MessageBusType(vsr.ProcessType.replica),storage.Storage,time.Time).replace_header (tigerbeetle)
-            assert(header.op <= self.op_checkpoint_trigger());
+# no environmental faults
+  assert(it.data_block_index == Table.index_data_blocks_used(it.index_block));
+  assert(!compaction.data.writable);
+  and replica unavailability with looping timeouts in the logs
+
+# with partitioning
+  assert(header.op <= self.op_checkpoint_trigger());
+  assert(self.op >= self.commit_max);
 ```
 
-and
-
-```
-/root/tigerbeetle/src/vsr/replica.zig:3878:19: 0x3284d4 in vsr.replica.ReplicaType(state_machine.StateMachineType(storage.Storage),message_bus.MessageBusType(vsr.ProcessType.replica),storage.Storage,time.Time).repair (tigerbeetle)
-            assert(self.op >= self.commit_max);
-```
-
-Test strategy is random transactions with occasional partitioning.
-
-After one replica panics, remaining two replicas can behave differently:
-
-  - continue servicing client requests until the end of the test
-  - refuse all further transactions
-  - client eviction panic
-
-Is it useful to open an issue with logs?
-
-(Over time, want to understand these findings and feed them into VOPR's PartitionMode.)
-
-### We'll check back after checking in with the dev team...
+### We'll check back after taking a look to see about reproducing these in TigerBeetle's own dev test env...
 
 ----
 

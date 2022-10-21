@@ -40,14 +40,17 @@
 (def test-all-nemeses
   "A collection of partial options maps for various nemeses we want to run as a
   part of test-all."
-  [{:nemesis nil}
+  [; {:nemesis nil}
    {:nemesis #{:partition}}
    {:nemesis #{:packet}}
    {:nemesis #{:pause}}
-   {:nemesis #{:partition :packet :pause}}
-   {:nemesis #{:kill}}
-   {:nemesis #{:file-corruption}}
-   {:nemesis #{:file-corruption :kill}}])
+   {:nemesis #{:partition :packet}}
+   {:nemesis #{:partition :pause}}
+   {:nemesis #{:packet :pause}}
+   ;;  {:nemesis #{:kill}}
+   ;;  {:nemesis #{:file-corruption}}
+   ;;  {:nemesis #{:file-corruption :kill}}
+   ])
 
 (def partition-targets
   "Valid targets for partition nemesis operations."
