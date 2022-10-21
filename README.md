@@ -91,6 +91,40 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
+There are some panics that `jepsen-tigerbeetle` is finding that may be new:
+
+```
+/root/tigerbeetle/src/vsr/replica.zig:4501:19: 0x34634b in vsr.replica.ReplicaType(state_machine.StateMachineType(storage.Storage),message_bus.MessageBusType(vsr.ProcessType.replica),storage.Storage,time.Time).replace_header (tigerbeetle)
+            assert(header.op <= self.op_checkpoint_trigger());
+```
+
+and
+
+```
+/root/tigerbeetle/src/vsr/replica.zig:3878:19: 0x3284d4 in vsr.replica.ReplicaType(state_machine.StateMachineType(storage.Storage),message_bus.MessageBusType(vsr.ProcessType.replica),storage.Storage,time.Time).repair (tigerbeetle)
+            assert(self.op >= self.commit_max);
+```
+
+Test strategy is random transactions with occasional partitioning.
+
+After one replica panics, remaining two replicas can behave differently:
+
+  - continue servicing client requests until the end of the test
+  - refuse all further transactions
+  - client eviction panic
+
+Is it useful to open an issue with logs?
+
+(Over time, want to understand these findings and feed them into VOPR's PartitionMode.)
+
+### We'll check back after checking in with the dev team...
+
+----
+
+## Experience Log
+
+### Confirming VOPR/LSM bugs
+
 Now that we can run longer tests, let's run a test until it fails:
 
 ```
@@ -108,17 +142,16 @@ And it turns out this was also found by TigerBeetle's LSM fuzzers: [lsm_forest_f
 
 **How wonderful! 🎉**
 
-LSM fuzzers found a state that would be found in the wild by an application.
+Possible data-point (or just confirming my biases 🙃):
 
-Experientially fuzzing TigerBeetle using the Java client was able to fuzz into the unreachable state.
+  - ✅ VOPR(+LSM) is proactively finding bugs that would express in real applications
+  - ✅ Application fuzzing can meaningfully explore the database state through the client
 
-It's mutually affirming!
+It's a nice mutual affirmation!
 
-### We'll check back in when the [bug fix](https://github.com/tigerbeetledb/tigerbeetle/pull/177) lands in `main`.
+And with the [bug fix](https://github.com/tigerbeetledb/tigerbeetle/pull/177) in `main`, our tests pass too!
 
 ----
-
-## Experience Log
 
 ### TigerBeetle is making good progress.
 

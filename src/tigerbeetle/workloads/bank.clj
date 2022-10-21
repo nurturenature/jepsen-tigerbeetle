@@ -15,8 +15,9 @@
   client/Client
   (open! [this {:keys [nodes] :as _test} node]
     (info "BankClient/open (" node "): " (tb/tb-replica-addresses nodes))
-    (let [conn  (u/timeout tb/tb-timeout :timeout
-                           (tb/new-tb-client nodes))]
+    (let [conn  ; (u/timeout tb/tb-timeout :timeout
+                ;            (tb/new-tb-client nodes))
+          :pool-placeholder]
       (if (= :timeout conn)
         (assoc this
                :conn  :no-client
@@ -31,7 +32,11 @@
     )
 
   (invoke! [{:keys [conn node] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
-    (let [op (assoc op :node node)]
+    (assert (= :pool-placeholder conn))
+    (let [[idx conn] (tb/rand-tb-client)
+          op (assoc op
+                    :node node
+                    :client idx)]
       (case f
         :transfer (let [errors (u/timeout tb/tb-timeout :timeout
                                           (tb/create-transfers conn [value]))]
@@ -72,7 +77,9 @@
     )
 
   (close! [{:keys [conn] :as _this} _test]
-    (tb/close-tb-client conn)))
+    (assert (= :pool-placeholder conn))
+    ; no-op
+    ))
 
 (defn workload
   "Constructs a workload:
@@ -80,7 +87,7 @@
    {:client, :generator, :final-generator, :checker}
    ```
    for a bank test, given options from the CLI test constructor."
-  [{:keys [accounts] :as opts}]
+  [{:keys [accounts rate] :as opts}]
   (let [; TigerBeetle accounts cannot start at 0
         accounts     (or accounts (vec (range 1 9)))
         total-amount 0
@@ -94,9 +101,12 @@
       :total-amount total-amount
       :client       (BankClient. nil)
       :final-generator (gen/phases
-                        (gen/log "No quiesce...")
+                        (gen/log "Quiesce...")
+                        (gen/sleep 5)
                         (gen/log "Final reads...")
                         (->> jbank/read
+                             (gen/map (fn [op] (assoc op :final? true)))
                              (gen/once)
                              (gen/each-thread)
-                             (gen/clients)))})))
+                             (gen/clients)
+                             (gen/stagger (/ rate))))})))
