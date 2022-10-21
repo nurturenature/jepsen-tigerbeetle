@@ -124,13 +124,16 @@
     (kill! [_this _test _node]
       (c/su
        (cu/stop-daemon! pid-path)
-       (cu/grepkill! :tigerbeetle)))
+       (cu/grepkill! :tigerbeetle))
+      :killed)
 
     db/Pause
     (pause! [_this _test _node]
       (c/su
-       (cu/grepkill! :stop :tigerbeetle)))
+       (cu/grepkill! :stop :tigerbeetle))
+      :paused)
 
     (resume! [_this _test _node]
       (c/su
-       (cu/grepkill! :cont :tigerbeetle)))))
+       (cu/grepkill! :cont :tigerbeetle))
+      :resumed)))

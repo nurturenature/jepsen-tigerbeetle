@@ -64,7 +64,7 @@
     )
 
   (invoke! [{:keys [conn] :as _this}
-            {:keys [accounts] :as _test}
+            _test
             {:keys [f value] :as op}]
     (assert (= :pool-placeholder conn))
     (let [[idx conn] (tb/rand-tb-client)
@@ -106,7 +106,7 @@
                   (let [results (->> results
                                      (reduce (fn [acc {:keys [id]}]
                                                (conj acc id))
-                                             #{}))]
+                                             (sorted-set)))]
                     (assoc op
                            :type  :ok
                            :value (independent/tuple k results))))))))
@@ -126,7 +126,7 @@
    {:client, :generator, :final-generator, :checker}
    ```
    for a set-full test, given options from the CLI test constructor."
-  [{:keys [keys nodes accounts] :as _opts}]
+  [{:keys [keys nodes accounts rate] :as _opts}]
   (let [keys (or keys (drop 1 (range (+ 1 (count nodes)))))]
     {:keys            keys
      :total-amount    0
@@ -135,10 +135,12 @@
                        (checker/set-full {:linearizable? true}))
      :generator       (gen/mix [(adds keys (->> accounts count (+ 1))) (reads keys)])
      :final-generator (gen/phases
-                       (gen/log "No quiesce...")
+                       (gen/log "Quiesce...")
+                       (gen/sleep 5)
                        (gen/log "Final reads...")
                        (->> keys
                             (map (fn [k]
                                    (gen/once (reads [k] true))))
                             (gen/each-thread)
-                            (gen/clients)))}))
+                            (gen/clients)
+                            (gen/stagger (/ rate))))}))

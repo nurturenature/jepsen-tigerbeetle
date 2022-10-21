@@ -3,8 +3,7 @@
             [jepsen
              [util :as u]]
             [jepsen.control.net :as cn]
-            [slingshot.slingshot :refer [try+]]
-            [jepsen.client :as client])
+            [slingshot.slingshot :refer [try+]])
   (:import (com.tigerbeetle AccountBatch Client IdBatch TransferBatch UInt128)))
 
 (def tb-cluster
