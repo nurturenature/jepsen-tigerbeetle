@@ -46,10 +46,10 @@
                              :type  :info
                              :error :timeout)
 
+                      ; transfer failed
                       (seq errors)
-                      ; TODO: may be able to :fail?
                       (assoc op
-                             :type  :info
+                             :type  :fail
                              :error errors)
 
                       :else

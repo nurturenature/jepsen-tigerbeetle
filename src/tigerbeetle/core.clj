@@ -82,9 +82,12 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis rate tigerbeetle-update tigerbeetle-debug? concurrency] :as opts}]
+  [{:keys [nodes workload nemesis rate concurrency
+           tigerbeetle-update tigerbeetle-debug? tigerbeetle-client-max-concurrency] :as opts}]
   (str "TigerBeetle"
-       " (" (count nodes) "r-" (tb/num-tb-clients opts) "c-" concurrency "w)"
+       " (" (count nodes) "r-"
+       (tb/num-tb-clients opts) (when tigerbeetle-client-max-concurrency (str ":" tigerbeetle-client-max-concurrency)) "c-"
+       concurrency "w)"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
@@ -255,6 +258,10 @@
     :default  10
     :parse-fn read-string
     :validate validate-non-neg]
+
+   [nil "--tigerbeetle-client-max-concurrency INT" "Passed to Client new to configure TigerBeetle client."
+    ; :default nil, use Client defaults
+    :parse-fn parse-long]
 
    [nil "--tigerbeetle-debug? BOOLEAN" "Install Tigerbeetle with debugging."
     ; :default false

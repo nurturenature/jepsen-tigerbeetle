@@ -61,9 +61,11 @@
 (defn new-tb-client
   "Create a new TigerBeetle client for the cluster of nodes.
   Returns a new java Object or nil if client could not be created."
-  [nodes]
+  [{:keys [nodes tigerbeetle-client-max-concurrency] :as _test}]
   (try+
-   (Client. tb-cluster (into-array String (tb-replica-addresses nodes)))
+   (if tigerbeetle-client-max-concurrency
+     (Client. tb-cluster (into-array String (tb-replica-addresses nodes)) tigerbeetle-client-max-concurrency)
+     (Client. tb-cluster (into-array String (tb-replica-addresses nodes))))
    (catch [] {}
      nil)))
 
@@ -86,10 +88,10 @@
 (defn fill-client-pool
   "Create TigerBeetle clients and put them in the pool.
    Returns the number of clients created."
-  [{:keys [nodes] :as test}]
+  [test]
   (let [num-clients (num-tb-clients test)]
     (dotimes [i num-clients]
-      (let [client (new-tb-client nodes)]
+      (let [client (new-tb-client test)]
         (when client
           (swap! tb-client-pool assoc i client))))
     (count @tb-client-pool)))
@@ -178,7 +180,7 @@
                           r (.getResult errors)]
                       (.setPosition batch i)
                       {:id     (.getId              batch UInt128/LeastSignificant)
-                       :error  r
+                       :error  (.toString r)
                        :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
                        :to     (.getCreditAccountId batch UInt128/LeastSignificant)
                        :amount (.getAmount          batch)}))))))
