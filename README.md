@@ -91,6 +91,8 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
+### And these are known issues already identified by the LSM fuzzer. Tests were running against prior commits. 😔
+
 There are some panics and cluster unavailability that `jepsen-tigerbeetle` is finding that are new.
 
 An issue has been opened, [random transactions (w/no environmental faults) can panic or cause the replica to become unavailable](https://github.com/tigerbeetledb/tigerbeetle/issues/215).
