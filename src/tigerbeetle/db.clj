@@ -52,6 +52,8 @@
                  (info "git status: " (c/exec :git :status :--short :--branch))
                  (info "log-level: " (c/exec :grep "pub const log_level" tb-zig-conf))
                  (info "tigerBeetle debug / bin: " (boolean tigerbeetle-debug?) " / " (c/exec :ls :-l tb-bin))))))
+      (c/cd tb-dir
+            (info "git commit: " (c/exec :git :show :--oneline :-s)))
 
       ; create the TigerBeetle data file
       (c/su

@@ -178,7 +178,7 @@
                           r (.getResult errors)]
                       (.setPosition batch i)
                       {:id     (.getId              batch UInt128/LeastSignificant)
-                       :error  r
+                       :error  (.toString r)
                        :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
                        :to     (.getCreditAccountId batch UInt128/LeastSignificant)
                        :amount (.getAmount          batch)}))))))
