@@ -133,7 +133,8 @@
      :client          (SetClient. nil)
      :checker         (independent/checker
                        (checker/set-full {:linearizable? true}))
-     :generator       (gen/mix [(adds keys (->> accounts count (+ 1))) (reads keys)])
+     :generator       (->> (gen/mix [(adds keys (->> accounts count (+ 1))) (reads keys)])
+                           (gen/stagger (/ rate)))
      :final-generator (gen/phases
                        (gen/log "Quiesce...")
                        (gen/sleep 5)
