@@ -95,7 +95,7 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 Thundering hordes can come and go, kicking up some compaction on the way, and then they are all served and on their way.
 
-[thundering hordes latency](doc/images/thundering-hordes.png)
+![thundering hordes latency](./doc/images/thundering-hordes.png)
 
 All tests run to completion w/o errors.
 All reads/writes check consistent.
