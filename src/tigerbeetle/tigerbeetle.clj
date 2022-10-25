@@ -7,6 +7,14 @@
             [slingshot.slingshot :refer [try+]])
   (:import (com.tigerbeetle AccountBatch Client IdBatch TransferBatch UInt128)))
 
+(def tb-max-num-clients
+  "Maximum num of TigerBeetle clients."
+  32)
+
+(def tb-timeout
+  "Timeout value in ms for Tigerbeetle transactions."
+  1e+9)
+
 (def tb-cluster
   "TigerBeetle Cluster number."
   0)
@@ -52,13 +60,6 @@
   "TigerBeetle ledger."
   720)
 
-(def tb-timeout
-  "Timeout value in ms for Tigerbeetle transactions."
-  1e+6)
-
-; TODO: use flags.linked for linked transactions
-; TODO: use flags.pending for pending transactions
-
 (defn new-tb-client
   "Create a new TigerBeetle client for the cluster of nodes.
   Returns a new java Object or nil if client could not be created."
@@ -91,6 +92,7 @@
    Returns the number of clients created."
   [test]
   (let [num-clients (num-tb-clients test)]
+    (assert (<= num-clients tb-max-num-clients))
     (dotimes [i num-clients]
       (let [client (new-tb-client test)]
         (when client

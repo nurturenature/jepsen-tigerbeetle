@@ -49,7 +49,6 @@
                            (str "s/^pub const log_level = .*/pub const log_level = " (:log-level actions) ";/")
                            tb-zig-conf))
                  (when (:install actions) (c/exec "scripts/install.sh" (if tigerbeetle-debug? :--debug "")))
-                 (info "git status: " (c/exec :git :status :--short :--branch))
                  (info "log-level: " (c/exec :grep "pub const log_level" tb-zig-conf))
                  (info "tigerBeetle debug / bin: " (boolean tigerbeetle-debug?) " / " (c/exec :ls :-l tb-bin))))))
       (c/cd tb-dir
@@ -87,7 +86,6 @@
 
       (warn "Leaving TigerBeetle source, build, at: " tb-dir))
 
-    db/Primary
     ; TODO
     ; TigerBeetle doesn't have "primaries".
     ; We'll use them to mean "leader'."
