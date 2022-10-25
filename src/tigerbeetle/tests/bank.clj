@@ -50,8 +50,7 @@
   "A generator that does a `:final? true` read on each worker."
   []
   (gen/phases
-   (gen/log "Quiesce...")
-   (gen/sleep 5)
+   (gen/log "No quiesce...")
    (gen/log "Final reads...")
    (->> reads
         (gen/map (fn [op] (assoc op :final? true)))

@@ -89,6 +89,20 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ----
 
+## Design Philosophies
+
+We assume:
+  - strict serializability
+  - deterministic outcome
+
+
+So:
+  - transactions do not have real timeouts
+  - no quiescence at the end of the test before final reads
+
+
+----
+
 ## Current Status
 
 ### Long running no fault tests are now long running. ⏳ 💤

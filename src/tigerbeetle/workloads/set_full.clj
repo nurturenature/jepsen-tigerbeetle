@@ -136,8 +136,7 @@
      :generator       (->> (gen/mix [(adds keys (->> accounts count (+ 1))) (reads keys)])
                            (gen/stagger (/ rate)))
      :final-generator (gen/phases
-                       (gen/log "Quiesce...")
-                       (gen/sleep 5)
+                       (gen/log "No quiesce...")
                        (gen/log "Final reads...")
                        (->> keys
                             (map (fn [k]
