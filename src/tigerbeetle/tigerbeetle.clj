@@ -1,5 +1,6 @@
 (ns tigerbeetle.tigerbeetle
   (:require [clojure.string :refer [join]]
+            [clojure.tools.logging :refer [info warn]]
             [jepsen
              [util :as u]]
             [jepsen.control.net :as cn]
@@ -53,7 +54,7 @@
 
 (def tb-timeout
   "Timeout value in ms for Tigerbeetle transactions."
-  10000)
+  1e+6)
 
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions
@@ -163,10 +164,10 @@
   [client transfers]
   (when (seq transfers)
     (let [batch (TransferBatch. (count transfers))
-          _     (doseq [{:keys [from to amount] :as _transfer} transfers]
+          _     (doseq [{:keys [id from to amount] :as _transfer} transfers]
                   (.add batch)
-                ; TODO: create linked/pending transfers
-                  (.setId              batch (u/rand-distribution {:min 1, :max 1e+8}) 0)
+                  ; TODO: create linked/pending transfers
+                  (.setId              batch id 0)
                   (.setCreditAccountId batch to 0)
                   (.setDebitAccountId  batch from 0)
                   (.setCode            batch tb-code)

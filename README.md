@@ -91,6 +91,29 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ## Current Status
 
+### Long running no fault tests are now long running. ⏳ 💤
+
+Thundering hordes can come and go, kicking up some compaction on the way, and then they are all served and on their way.
+
+[thundering hordes latency](doc/images/thundering-hordes.png)
+
+All tests run to completion w/o errors.
+All reads/writes check consistent.
+
+The experience prompted looking up the etymology of deterministic:
+
+> Middle English, from Anglo-French determiner, from Latin determinare,
+> 
+> from de- + terminare to limit,
+>  
+> from terminus boundary, limit
+
+### We'll check back after enhancing the usage and configuration of the Java client in preparation of more explicit scenarios...
+
+----
+
+## Experience Log
+
 ### And these are known issues already identified by the LSM fuzzer. Tests were running against prior commits. 😔
 
 There are some panics and cluster unavailability that `jepsen-tigerbeetle` is finding that are new.
@@ -108,12 +131,6 @@ An issue has been opened, [random transactions (w/no environmental faults) can p
   assert(header.op <= self.op_checkpoint_trigger());
   assert(self.op >= self.commit_max);
 ```
-
-### We'll check back after taking a look to see about reproducing these in TigerBeetle's own dev test env...
-
-----
-
-## Experience Log
 
 ### Confirming VOPR/LSM bugs
 

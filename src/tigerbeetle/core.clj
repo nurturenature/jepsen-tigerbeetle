@@ -70,7 +70,6 @@
   (gen/phases
    (gen/log "Workload with nemesis")
    (->> (:generator workload)
-        (gen/stagger (/ (:rate opts)))
         (gen/nemesis (:generator package))
         (gen/time-limit (:time-limit opts)))
 
@@ -82,17 +81,16 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis rate concurrency
+  [{:keys [nodes workload nemesis concurrency
            tigerbeetle-update tigerbeetle-debug? tigerbeetle-client-max-concurrency] :as opts}]
   (str "TigerBeetle"
-       " (" (count nodes) "r-"
-       (tb/num-tb-clients opts) (when tigerbeetle-client-max-concurrency (str ":" tigerbeetle-client-max-concurrency)) "c-"
-       concurrency "w)"
+       " (r" (count nodes) "-"
+       "c" (tb/num-tb-clients opts) (when tigerbeetle-client-max-concurrency (str ":" tigerbeetle-client-max-concurrency)) "-"
+       "w" concurrency ")"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
              (str (seq nemesis)))
-       (if (not= 10 rate) (str " :rate-" rate) "")
        (if tigerbeetle-update (str " :git-" (subs tigerbeetle-update 0 (min 8 (count tigerbeetle-update)))) "")
        (if tigerbeetle-debug? " :debug" "")))
 
@@ -115,21 +113,10 @@
                               :behaviors [{:duplicate {:percent      :20%
                                                        :correlation  :75%}
                                            :reorder   {:percent      :20%
-                                                       :correlation  :75%}}
-                                          ;; {:delay {:time         :200ms
-                                          ;;          :jitter       :10ms
-                                          ;;          :correlation  :25%
-                                          ;;          :distribution :normal}}
-                                          ]
-                                    ;; (for [_ (range 10)]
-                                    ;;   (->> net/all-packet-behaviors
-                                    ;;        (random-sample (/ (+ 1 (rand-int 3))
-                                    ;;                          (count net/all-packet-behaviors)))
-                                    ;;        (into {})))
-                              }
+                                                       :correlation  :75%}}]}
                   :pause     {:targets (:db-targets opts)}
-                  :kill      {:targets (:db-targets opts)}
-                  :file-corruption {:targets     (:db-targets opts)
+                  :kill      {:targets [:one :minority]}          ; (:db-targets opts)}
+                  :file-corruption {:targets     [:one :minority] ;(:db-targets opts)
                                     :corruptions [{:type :bitflip
                                                    :file db/data-dir
                                                    :probability {:distribution :one-of :values [1e-2 1e-3 1e-4]}}
@@ -258,6 +245,10 @@
     :default  10
     :parse-fn read-string
     :validate validate-non-neg]
+
+   [nil "--rate-cycle? BOOLEAN" "Cycle the rate between rate/4, rate/2, rate/4, rate"
+    :default  false
+    :parse-fn parse-boolean]
 
    [nil "--tigerbeetle-client-max-concurrency INT" "Passed to Client new to configure TigerBeetle client."
     ; :default nil, use Client defaults
