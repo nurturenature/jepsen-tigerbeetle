@@ -14,17 +14,14 @@
    [tigerbeetle
     [db :as db]
     [tigerbeetle :as tb]]
-   [tigerbeetle.tests.cycle
-    [g-counter :as g-counter]]
-   [tigerbeetle.workloads.bank :as bank]
-   [tigerbeetle.workloads.set-full :as set-full]))
+   [tigerbeetle.workloads
+    [bank :as bank]
+    [set-full :as set-full]]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
   {:bank      bank/workload
-   :set-full  set-full/workload
-   ; TODO: g-counter g-counter/workload
-   })
+   :set-full  set-full/workload})
 
 (def nemeses
   "The types of faults our nemesis can produce"
