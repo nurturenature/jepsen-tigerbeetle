@@ -32,41 +32,37 @@
     )
 
   (invoke! [{:keys [conn node] :as _this} _test {:keys [f value] :as op}]
+    (assert (= :txn f))
     (assert (= :pool-placeholder conn))
-    (let [[idx conn] (tb/rand-tb-client)
+    (let [[idx client] (tb/rand-tb-client)
           op (assoc op
-                    :node node
-                    :client idx)]
+                    :node   node
+                    :client idx)
+          [f _k _v] (first value)]
       (case f
-        :transfer (let [errors (u/timeout tb/tb-timeout :timeout
-                                          (tb/create-transfers conn [value]))]
-                    (cond
-                      (= errors :timeout)
-                      (assoc op
-                             :type  :info
-                             :error :timeout)
+        :t (let [results (u/timeout tb/tb-timeout :timeout
+                                    (tb/create-transfers client value))]
+             (cond
+               (= results :timeout)
+               (assoc op
+                      :type  :info
+                      :error :timeout)
 
-                      ; transfer failed
-                      (seq errors)
-                      (assoc op
-                             :type  :fail
-                             :error errors)
+               :else
+               (assoc op :type :ok :value value)))
 
-                      :else
-                      (assoc op :type :ok)))
+        :r (let [results (u/timeout tb/tb-timeout :timeout
+                                    (tb/lookup-accounts client value))]
+             (cond
+               (= :timeout results)
+               (assoc op
+                      :type  :info
+                      :error :timeout)
 
-        :txn (let [results (u/timeout tb/tb-timeout :timeout
-                                      (tb/lookup-accounts conn value))]
-               (cond
-                 (= :timeout results)
-                 (assoc op
-                        :type  :info
-                        :error :timeout)
-
-                 :else
-                 (assoc op
-                        :type  :ok
-                        :value results))))))
+               :else
+               (assoc op
+                      :type  :ok
+                      :value results))))))
 
   (teardown! [_this _test]
     ; no-op

@@ -9,7 +9,8 @@
              [util :as util]]
             [jepsen.checker.perf :as perf]
             [knossos.history :as history]
-            [gnuplot.core :as g]))
+            [gnuplot.core :as g]
+            [tigerbeetle.tigerbeetle :as tb]))
 
 (def reads
   "A generator of read operations."
@@ -34,11 +35,11 @@
           amount (util/rand-distribution {:min 1 :max (+ 1 max-transfer)})
           id     (util/rand-distribution {:min 1})]
       {:type  :invoke
-       :f     :transfer
-       :value {:id          id
-               :debit-acct  debit-acct
-               :credit-acct credit-acct
-               :amount      amount}})))
+       :f     :txn
+       :value [[:t tb/tb-ledger {:id          id
+                                 :debit-acct  debit-acct
+                                 :credit-acct credit-acct
+                                 :amount      amount}]]})))
 
 (defn generator
   "A mixture of reads and transfers for clients."
@@ -62,17 +63,20 @@
   [history]
   (->> history
        (map (fn [{:keys [type f value] :as op}]
-              (case [type f]
-                [:invoke :txn]
-                (assoc op :f :read)
+              (let [[f _ledger _value] (first value)]
+                (case [type f]
+                  ([:invoke :r] [:info :r] [:fail :r])
+                  (assoc op :f :read)
 
-                [:ok :txn]
-                (let [value  (->> value
-                                  (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
-                                            (assoc acc id (- credits-posted debits-posted)))
-                                          {}))]
-                  (assoc op :f :read :value value))
-                op)))))
+                  [:ok :r]
+                  (let [value  (->> value
+                                    (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
+                                              (assoc acc id (- credits-posted debits-posted)))
+                                            {}))]
+                    (assoc op :f :read :value value))
+
+                  ([:invoke :t] [:ok :t] [:info :t] [:fail :t])
+                  (assoc op :f :transfer)))))))
 
 (defn err-badness
   "Takes a bank error and returns a number, depending on its type. Bigger

@@ -163,12 +163,14 @@
                               :debits-posted  debits-posted}]))))))
 
 (defn create-transfers
-  "Takes a sequence of transfers and creates them in TigerBeetle.
-   Returns a lazy sequence of any errors `{:id :error :debit-acct :credit-acct :amount}`."
+  "Takes a sequence of 
+   [:t ledger {:id ... :debit-acct ... :credit-acct ...:amount ...}]
+   and creates them in TigerBeetle.
+   Returns a lazy sequence of all transfers that were created."
   [client transfers]
   (when (seq transfers)
     (let [batch (TransferBatch. (count transfers))
-          _     (doseq [{:keys [id debit-acct credit-acct amount] :as _transfer} transfers]
+          _     (doseq [[_:t ledger {:keys [id debit-acct credit-acct amount]}] transfers]
                   (.add batch)
                   ; TODO: create linked/pending transfers
                   (.setId              batch id 0)
@@ -176,16 +178,16 @@
                   (.setDebitAccountId  batch debit-acct 0)
                   (.setCode            batch tb-code)
                   (.setAmount          batch amount)
-                  (.setLedger          batch tb-ledger))
-          errors (.createTransfers client batch)]
-      (repeatedly (.getLength errors)
-                  (fn []
-                    (.next errors)
-                    (let [i (.getIndex  errors)
-                          r (.getResult errors)]
-                      (.setPosition batch i)
-                      {:id          (.getId              batch UInt128/LeastSignificant)
-                       :error       (.toString r)
-                       :debit-acct  (.getDebitAccountId  batch UInt128/LeastSignificant)
-                       :credit-acct (.getCreditAccountId batch UInt128/LeastSignificant)
-                       :amount      (.getAmount          batch)}))))))
+                  (.setLedger          batch ledger))
+          errors (.createTransfers client batch)
+          errors (reduce (fn [acc _]
+                           (.next errors)
+                           (let [i  (.getIndex    errors)
+                                 _  (.setPosition batch i)
+                                 id (.getId batch UInt128/LeastSignificant)]
+                             (conj acc id)))
+                         #{}
+                         (range (.getLength errors)))]
+      (->> transfers
+           (remove (fn [[_:t _ledger {:keys [id]}]]
+                     (contains? errors id)))))))
