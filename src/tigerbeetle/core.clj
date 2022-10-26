@@ -16,11 +16,13 @@
     [tigerbeetle :as tb]]
    [tigerbeetle.workloads
     [bank :as bank]
+    [ledger :as ledger]
     [set-full :as set-full]]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
   {:bank      bank/workload
+   :ledger    ledger/workload
    :set-full  set-full/workload})
 
 (def nemeses

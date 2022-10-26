@@ -162,16 +162,16 @@
 
 (defn create-transfers
   "Takes a sequence of transfers and creates them in TigerBeetle.
-   Returns a lazy sequence of any errors `{:id :error :from :to :amount}`."
+   Returns a lazy sequence of any errors `{:id :error :debit-acct :credit-acct :amount}`."
   [client transfers]
   (when (seq transfers)
     (let [batch (TransferBatch. (count transfers))
-          _     (doseq [{:keys [id from to amount] :as _transfer} transfers]
+          _     (doseq [{:keys [id debit-acct credit-acct amount] :as _transfer} transfers]
                   (.add batch)
                   ; TODO: create linked/pending transfers
                   (.setId              batch id 0)
-                  (.setCreditAccountId batch to 0)
-                  (.setDebitAccountId  batch from 0)
+                  (.setCreditAccountId batch credit-acct 0)
+                  (.setDebitAccountId  batch debit-acct 0)
                   (.setCode            batch tb-code)
                   (.setAmount          batch amount)
                   (.setLedger          batch tb-ledger))
@@ -182,8 +182,8 @@
                     (let [i (.getIndex  errors)
                           r (.getResult errors)]
                       (.setPosition batch i)
-                      {:id     (.getId              batch UInt128/LeastSignificant)
-                       :error  (.toString r)
-                       :from   (.getDebitAccountId  batch UInt128/LeastSignificant)
-                       :to     (.getCreditAccountId batch UInt128/LeastSignificant)
-                       :amount (.getAmount          batch)}))))))
+                      {:id          (.getId              batch UInt128/LeastSignificant)
+                       :error       (.toString r)
+                       :debit-acct  (.getDebitAccountId  batch UInt128/LeastSignificant)
+                       :credit-acct (.getCreditAccountId batch UInt128/LeastSignificant)
+                       :amount      (.getAmount          batch)}))))))

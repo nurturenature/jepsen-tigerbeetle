@@ -6,15 +6,15 @@
              [util :as u]]
             [slingshot.slingshot :refer [throw+]]
             [tigerbeetle.tigerbeetle :as tb]
-            [tigerbeetle.tests.bank :as bank]))
+            [tigerbeetle.tests.ledger :as ledger]))
 
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions
 
-(defrecord BankClient [conn]
+(defrecord LedgerClient [conn]
   client/Client
   (open! [this {:keys [nodes] :as _test} node]
-    (info "BankClient/open (" node "): " (tb/tb-replica-addresses nodes))
+    (info "LedgerClient/open (" node "): " (tb/tb-replica-addresses nodes))
     (let [conn  ; (u/timeout tb/tb-timeout :timeout
                 ;            (tb/new-tb-client nodes))
           :pool-placeholder]
@@ -86,9 +86,9 @@
    ```clj
    {:client, :generator, :final-generator, :checker}
    ```
-   for a bank test, given options from the CLI test constructor."
+   for a ledger test, given options from the CLI test constructor."
   [{:keys [rate-cycle?] :as opts}]
-  (let [{:keys [generator final-generator rate nemesis-interval] :as bank-test} (bank/test opts)
+  (let [{:keys [generator final-generator rate nemesis-interval] :as ledger-test} (ledger/test opts)
         [generator
          final-generator] (if rate-cycle?
                             [(gen/cycle-times
@@ -100,7 +100,7 @@
                             [(->> generator       (gen/stagger (/ rate)))
                              (->> final-generator (gen/stagger (/ rate)))])]
     (merge
-     bank-test
-     {:client          (BankClient. nil)
+     ledger-test
+     {:client          (LedgerClient. nil)
       :generator       generator
       :final-generator final-generator})))

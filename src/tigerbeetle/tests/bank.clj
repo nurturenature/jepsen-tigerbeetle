@@ -36,10 +36,10 @@
           id     (util/rand-distribution {:min 1})]
       {:type  :invoke
        :f     :transfer
-       :value {:id     id
-               :from   from
-               :to     to
-               :amount amount}})))
+       :value {:id          id
+               :debit-acct  from
+               :credit-acct to
+               :amount      amount}})))
 
 (defn generator
   "A mixture of reads and transfers for clients."

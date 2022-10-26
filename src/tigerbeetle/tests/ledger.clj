@@ -20,20 +20,20 @@
   "Generator of transfer operations:
    a random amount between two different randomly selected accounts."
   (fn [{:keys [accounts max-transfer] :as _test} _ctx]
-    (let [from   (rand-nth accounts)
-          to     ((fn find-to []
-                    (let [to (rand-nth accounts)]
-                      (if (not= to from)
-                        to
-                        (find-to)))))
+    (let [debit-acct  (rand-nth accounts)
+          credit-acct ((fn diff-acct []
+                         (let [credit-acct (rand-nth accounts)]
+                           (if (not= credit-acct debit-acct)
+                             credit-acct
+                             (diff-acct)))))
           amount (util/rand-distribution {:min 1 :max (+ 1 max-transfer)})
           id     (util/rand-distribution {:min 1})]
       {:type  :invoke
        :f     :transfer
-       :value {:id     id
-               :from   from
-               :to     to
-               :amount amount}})))
+       :value {:id          id
+               :debit-acct  debit-acct
+               :credit-acct credit-acct
+               :amount      amount}})))
 
 (defn generator
   "A mixture of reads and transfers for clients."
@@ -225,9 +225,9 @@
                           (util/map-vals points))
               colors (perf/qs->colors (keys totals))
               path (.getCanonicalPath
-                    (store/path! test (:subdirectory opts) "bank.png"))
+                    (store/path! test (:subdirectory opts) "ledger.png"))
               preamble (concat (perf/preamble path)
-                               [['set 'title (str (:name test) " bank")]
+                               [['set 'title (str (:name test) " ledger")]
                                 '[set ylabel "Total of all accounts"]])
               series (for [[node data] totals]
                        {:title      node

@@ -89,6 +89,7 @@
     ; TODO
     ; TigerBeetle doesn't have "primaries".
     ; We'll use them to mean "leader'."
+    db/Primary
     (primaries [_db test]
       (:nodes test))
 
