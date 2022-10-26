@@ -41,10 +41,10 @@ Uses Jepsen's [bank test](https://jepsen-io.github.io/jepsen/jepsen.tests.bank.h
 ```clj
 ; sample bank client operations
 
-:invoke	:transfer	{:from 2, :to 1, :amount 3}
-:ok	:transfer	{:from 2, :to 1, :amount 3}
-:invoke	:transfer	{:from 1, :to 2, :amount 2}
-:ok	:transfer	{:from 1, :to 2, :amount 2}
+:invoke	:transfer	{:debit-acct 2, :credit-acct 1, :amount 3}
+:ok	:transfer	{:debit-acct 2, :credit-acct 1, :amount 3}
+:invoke	:transfer	{:debit-acct 1, :credit-acct 2, :amount 2}
+:ok	:transfer	{:debit-acct 1, :credit-acct 2, :amount 2}
 :invoke	:read	nil
 :ok	:read	{1 -3, 2 3}
 ```

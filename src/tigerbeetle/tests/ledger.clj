@@ -1,11 +1,5 @@
-(ns tigerbeetle.tests.bank
-  "Helper functions for doing bank tests, where you simulate transfers between
-  accounts, and verify that reads always show the same balance. The test map
-  should have these additional options:
-
-  :accounts     A collection of account identifiers.
-  :total-amount Total amount to allocate.
-  :max-transfer The largest transfer we'll try to execute."
+(ns tigerbeetle.tests.ledger
+  "An assumed strict serializable ledger test."
   (:refer-clojure :exclude [read test])
   (:require [knossos.op :as op]
             [clojure.core.reducers :as r]
@@ -15,31 +9,37 @@
              [util :as util]]
             [jepsen.checker.perf :as perf]
             [knossos.history :as history]
-            [gnuplot.core :as g]))
+            [gnuplot.core :as g]
+            [tigerbeetle.tigerbeetle :as tb]))
 
 (def reads
   "A generator of read operations."
-  (repeat {:type :invoke
-           :f    :read}))
+  (fn [{:keys [accounts] :as _test} _ctx]
+    (let [rs (->> accounts
+                  (map (fn [acct]
+                         [:r acct nil])))]
+      {:type  :invoke
+       :f     :txn
+       :value rs})))
 
 (def transfers
   "Generator of transfer operations:
    a random amount between two different randomly selected accounts."
   (fn [{:keys [accounts max-transfer] :as _test} _ctx]
-    (let [from   (rand-nth accounts)
-          to     ((fn find-to []
-                    (let [to (rand-nth accounts)]
-                      (if (not= to from)
-                        to
-                        (find-to)))))
+    (let [debit-acct  (rand-nth accounts)
+          credit-acct ((fn diff-acct []
+                         (let [credit-acct (rand-nth accounts)]
+                           (if (not= credit-acct debit-acct)
+                             credit-acct
+                             (diff-acct)))))
           amount (util/rand-distribution {:min 1 :max (+ 1 max-transfer)})
           id     (util/rand-distribution {:min 1})]
       {:type  :invoke
-       :f     :transfer
-       :value {:id     id
-               :from   from
-               :to     to
-               :amount amount}})))
+       :f     :txn
+       :value [[:t tb/tb-ledger {:id          id
+                                 :debit-acct  debit-acct
+                                 :credit-acct credit-acct
+                                 :amount      amount}]]})))
 
 (defn generator
   "A mixture of reads and transfers for clients."
@@ -57,6 +57,26 @@
         (gen/once)
         (gen/each-thread)
         (gen/clients))))
+
+(defn ledger->bank
+  "Takes a history from a ledger test and maps it to bank test semantics."
+  [history]
+  (->> history
+       (map (fn [{:keys [type value] :as op}]
+              (let [[f _ledger _value] (->> value util/coll first)]
+                (case [type f]
+                  ([:invoke :r] [:info :r] [:fail :r])
+                  (assoc op :f :read)
+
+                  [:ok :r]
+                  (let [value  (->> value
+                                    (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
+                                              (assoc acc id (- credits-posted debits-posted)))
+                                            {}))]
+                    (assoc op :f :read :value value))
+
+                  ([:invoke :t] [:ok :t] [:info :t] [:fail :t])
+                  (assoc op :f :transfer)))))))
 
 (defn err-badness
   "Takes a bank error and returns a number, depending on its type. Bigger
@@ -103,7 +123,8 @@
   [checker-opts]
   (reify checker/Checker
     (check [this test history opts]
-      (let [accts (set (:accounts test))
+      (let [history (->> history (ledger->bank))
+            accts (set (:accounts test))
             total (:total-amount test)
             reads (->> history
                        (r/filter op/ok?)
@@ -179,7 +200,8 @@
   []
   (reify checker/Checker
     (check [_this _test history _opts]
-      (let [unique-finals (->> history
+      (let [history (->> history (ledger->bank))
+            unique-finals (->> history
                                (filter (comp #{:read} :f))
                                (filter op/ok?)
                                (filter :final?)
@@ -225,31 +247,32 @@
   []
   (reify checker/Checker
     (check [this test history opts]
-      (when-let [reads (ok-reads history)]
-        (let [totals (->> reads
-                          (by-node test)
-                          (util/map-vals points))
-              colors (perf/qs->colors (keys totals))
-              path (.getCanonicalPath
-                    (store/path! test (:subdirectory opts) "bank.png"))
-              preamble (concat (perf/preamble path)
-                               [['set 'title (str (:name test) " bank")]
-                                '[set ylabel "Total of all accounts"]])
-              series (for [[node data] totals]
-                       {:title      node
-                        :with       :points
-                        :pointtype  2
-                        :linetype   (colors node)
-                        :data       data})]
-          (-> {:preamble  preamble
-               :series    series}
-              (perf/with-range)
-              (perf/with-nemeses history (:nemeses (:plot test)))
-              perf/plot!)
-          {:valid? true})))))
+      (let [history (->> history (ledger->bank))]
+        (when-let [reads (ok-reads history)]
+          (let [totals (->> reads
+                            (by-node test)
+                            (util/map-vals points))
+                colors (perf/qs->colors (keys totals))
+                path (.getCanonicalPath
+                      (store/path! test (:subdirectory opts) "ledger.png"))
+                preamble (concat (perf/preamble path)
+                                 [['set 'title (str (:name test) " ledger")]
+                                  '[set ylabel "Total of all accounts"]])
+                series (for [[node data] totals]
+                         {:title      node
+                          :with       :points
+                          :pointtype  2
+                          :linetype   (colors node)
+                          :data       data})]
+            (-> {:preamble  preamble
+                 :series    series}
+                (perf/with-range)
+                (perf/with-nemeses history (:nemeses (:plot test)))
+                perf/plot!)
+            {:valid? true}))))))
 
 (defn test
-  "A bank test:
+  "Assumed strict serializable ledger test:
      - can make default choices for accounts and amounts
      - generator of reads and transfers
      - final-generator for final? true reads on all workers

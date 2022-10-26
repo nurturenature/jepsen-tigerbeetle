@@ -15,6 +15,8 @@ Our reasoning, design, and implementation should conform to Kingsbury &amp; Alva
 
 ----
 
+The first step will be to create a ledger test with a client, generators, and checkers.
+
 ## Happened Before, Happened After, Don't Know
 
 Observing just Jepsen's log of reads and writes and their values, what can be asserted re transaction ordering?

@@ -89,6 +89,7 @@
     ; TODO
     ; TigerBeetle doesn't have "primaries".
     ; We'll use them to mean "leader'."
+    db/Primary
     (primaries [_db test]
       (:nodes test))
 
@@ -96,10 +97,10 @@
     ; Used to initialize database by setting up accounts,
     ; creating a pool of clients
     (setup-primary! [_db {:keys [accounts] :as test} _node]
-      (let [num-clients (tb/fill-client-pool test)]
-        (info "Created client pool of " num-clients))
-      (info "Creating accounts: " accounts)
-      (tb/with-tb-client tb/create-accounts accounts))
+      (let [num-clients      (tb/fill-client-pool test)
+            created-accounts (tb/with-tb-client tb/create-accounts (->> accounts
+                                                                        (map (fn [id] [:a id {:ledger tb/tb-ledger}]))))]
+        (info "Created client pool of " num-clients " for accounts " created-accounts)))
 
     db/LogFiles
     (log-files [_db _test _node]

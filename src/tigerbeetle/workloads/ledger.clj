@@ -1,4 +1,4 @@
-(ns tigerbeetle.workloads.bank
+(ns tigerbeetle.workloads.ledger
   (:require [clojure.tools.logging :refer [info]]
             [jepsen
              [client :as client]
@@ -6,15 +6,15 @@
              [util :as u]]
             [slingshot.slingshot :refer [throw+]]
             [tigerbeetle.tigerbeetle :as tb]
-            [tigerbeetle.tests.bank :as bank]))
+            [tigerbeetle.tests.ledger :as ledger]))
 
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions
 
-(defrecord BankClient [conn]
+(defrecord LedgerClient [conn]
   client/Client
   (open! [this {:keys [nodes] :as _test} node]
-    (info "BankClient/open (" node "): " (tb/tb-replica-addresses nodes))
+    (info "LedgerClient/open (" node "): " (tb/tb-replica-addresses nodes))
     (let [conn  ; (u/timeout tb/tb-timeout :timeout
                 ;            (tb/new-tb-client nodes))
           :pool-placeholder]
@@ -31,46 +31,38 @@
     ; no-op
     )
 
-  (invoke! [{:keys [conn node] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
+  (invoke! [{:keys [conn node] :as _this} _test {:keys [f value] :as op}]
+    (assert (= :txn f))
     (assert (= :pool-placeholder conn))
-    (let [[idx conn] (tb/rand-tb-client)
+    (let [[idx client] (tb/rand-tb-client)
           op (assoc op
-                    :node node
-                    :client idx)]
+                    :node   node
+                    :client idx)
+          [f _k _v] (first value)]
       (case f
-        :transfer (let [errors (u/timeout tb/tb-timeout :timeout
-                                          (tb/create-transfers conn [value]))]
-                    (cond
-                      (= errors :timeout)
-                      (assoc op
-                             :type  :info
-                             :error :timeout)
+        :t (let [results (u/timeout tb/tb-timeout :timeout
+                                    (tb/create-transfers client value))]
+             (cond
+               (= results :timeout)
+               (assoc op
+                      :type  :info
+                      :error :timeout)
 
-                      ; transfer failed
-                      (seq errors)
-                      (assoc op
-                             :type  :fail
-                             :error errors)
+               :else
+               (assoc op :type :ok :value value)))
 
-                      :else
-                      (assoc op :type :ok)))
+        :r (let [results (u/timeout tb/tb-timeout :timeout
+                                    (tb/lookup-accounts client value))]
+             (cond
+               (= :timeout results)
+               (assoc op
+                      :type  :info
+                      :error :timeout)
 
-        :read (let [results (u/timeout tb/tb-timeout :timeout
-                                       (tb/lookup-accounts conn accounts))]
-                (cond
-                  (= :timeout results)
-                  (assoc op
-                         :type  :info
-                         :error :timeout)
-
-                  :else
-                  (let [results (->> results
-                                     (reduce (fn [acc {:keys [id credits-posted debits-posted]}]
-                                               (assoc acc id (- credits-posted debits-posted)))
-                                             {}))]
-                    (assoc op
-                           :type :ok
-                           :value results)))))))
+               :else
+               (assoc op
+                      :type  :ok
+                      :value results))))))
 
   (teardown! [_this _test]
     ; no-op
@@ -86,9 +78,9 @@
    ```clj
    {:client, :generator, :final-generator, :checker}
    ```
-   for a bank test, given options from the CLI test constructor."
+   for a ledger test, given options from the CLI test constructor."
   [{:keys [rate-cycle?] :as opts}]
-  (let [{:keys [generator final-generator rate nemesis-interval] :as bank-test} (bank/test opts)
+  (let [{:keys [generator final-generator rate nemesis-interval] :as ledger-test} (ledger/test opts)
         [generator
          final-generator] (if rate-cycle?
                             [(gen/cycle-times
@@ -100,7 +92,7 @@
                             [(->> generator       (gen/stagger (/ rate)))
                              (->> final-generator (gen/stagger (/ rate)))])]
     (merge
-     bank-test
-     {:client          (BankClient. nil)
+     ledger-test
+     {:client          (LedgerClient. nil)
       :generator       generator
       :final-generator final-generator})))
