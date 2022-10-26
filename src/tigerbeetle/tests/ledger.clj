@@ -52,6 +52,20 @@
         (gen/each-thread)
         (gen/clients))))
 
+(defn ledger->bank
+  "Takes a history from a ledger test and maps it to bank test semantics."
+  [history]
+  (->> history
+       (map (fn [{:keys [type f value] :as op}]
+              (if (and (= :ok type)
+                       (= :read f))
+                (let [value  (->> value
+                                  (reduce (fn [acc {:keys [id debits-posted credits-posted] :as _acct}]
+                                            (assoc acc id (- credits-posted debits-posted)))
+                                          {}))]
+                  (assoc op :value value))
+                op)))))
+
 (defn err-badness
   "Takes a bank error and returns a number, depending on its type. Bigger
   numbers mean more egregious errors."
@@ -97,7 +111,8 @@
   [checker-opts]
   (reify checker/Checker
     (check [this test history opts]
-      (let [accts (set (:accounts test))
+      (let [history (->> history (ledger->bank))
+            accts (set (:accounts test))
             total (:total-amount test)
             reads (->> history
                        (r/filter op/ok?)
@@ -173,7 +188,8 @@
   []
   (reify checker/Checker
     (check [_this _test history _opts]
-      (let [unique-finals (->> history
+      (let [history (->> history (ledger->bank))
+            unique-finals (->> history
                                (filter (comp #{:read} :f))
                                (filter op/ok?)
                                (filter :final?)
@@ -219,28 +235,29 @@
   []
   (reify checker/Checker
     (check [this test history opts]
-      (when-let [reads (ok-reads history)]
-        (let [totals (->> reads
-                          (by-node test)
-                          (util/map-vals points))
-              colors (perf/qs->colors (keys totals))
-              path (.getCanonicalPath
-                    (store/path! test (:subdirectory opts) "ledger.png"))
-              preamble (concat (perf/preamble path)
-                               [['set 'title (str (:name test) " ledger")]
-                                '[set ylabel "Total of all accounts"]])
-              series (for [[node data] totals]
-                       {:title      node
-                        :with       :points
-                        :pointtype  2
-                        :linetype   (colors node)
-                        :data       data})]
-          (-> {:preamble  preamble
-               :series    series}
-              (perf/with-range)
-              (perf/with-nemeses history (:nemeses (:plot test)))
-              perf/plot!)
-          {:valid? true})))))
+      (let [history (->> history (ledger->bank))]
+        (when-let [reads (ok-reads history)]
+          (let [totals (->> reads
+                            (by-node test)
+                            (util/map-vals points))
+                colors (perf/qs->colors (keys totals))
+                path (.getCanonicalPath
+                      (store/path! test (:subdirectory opts) "ledger.png"))
+                preamble (concat (perf/preamble path)
+                                 [['set 'title (str (:name test) " ledger")]
+                                  '[set ylabel "Total of all accounts"]])
+                series (for [[node data] totals]
+                         {:title      node
+                          :with       :points
+                          :pointtype  2
+                          :linetype   (colors node)
+                          :data       data})]
+            (-> {:preamble  preamble
+                 :series    series}
+                (perf/with-range)
+                (perf/with-nemeses history (:nemeses (:plot test)))
+                perf/plot!)
+            {:valid? true}))))))
 
 (defn test
   "Assumed strict serializable ledger test:
