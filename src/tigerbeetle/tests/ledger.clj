@@ -13,8 +13,13 @@
 
 (def reads
   "A generator of read operations."
-  (repeat {:type :invoke
-           :f    :read}))
+  (fn [{:keys [accounts] :as _test} _ctx]
+    (let [rs (->> accounts
+                  (map (fn [acct]
+                         [:r acct nil])))]
+      {:type  :invoke
+       :f     :txn
+       :value rs})))
 
 (def transfers
   "Generator of transfer operations:
@@ -57,13 +62,16 @@
   [history]
   (->> history
        (map (fn [{:keys [type f value] :as op}]
-              (if (and (= :ok type)
-                       (= :read f))
+              (case [type f]
+                [:invoke :txn]
+                (assoc op :f :read)
+
+                [:ok :txn]
                 (let [value  (->> value
-                                  (reduce (fn [acc {:keys [id debits-posted credits-posted] :as _acct}]
+                                  (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
                                             (assoc acc id (- credits-posted debits-posted)))
                                           {}))]
-                  (assoc op :value value))
+                  (assoc op :f :read :value value))
                 op)))))
 
 (defn err-badness

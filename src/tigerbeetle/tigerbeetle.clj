@@ -143,22 +143,24 @@
                        {a r})))))))
 
 (defn lookup-accounts
-  "Takes a sequence of accounts and looks them up in TigerBeetle.
-   Returns a lazy sequence of `{:id :credits-posted :debits-posted}`
+  "Takes a sequence of `[:r id nil]` and looks them up in TigerBeetle.
+   Returns a lazy sequence of `[:r id {:credits-posted ... :debits-posted ...}]`
    for the accounts that were found."
-  [client accounts]
-  (when (seq accounts)
-    (let [batch (IdBatch. (count accounts))
-          _     (doseq [account accounts]
+  [client reads]
+  (when (seq reads)
+    (let [batch (IdBatch. (count reads))
+          _     (doseq [[_:r id _nil] reads]
                   (.add batch)
-                  (.setId batch account 0))
+                  (.setId batch id 0))
           results (.lookupAccounts client batch)]
       (repeatedly (.getLength results)
                   (fn []
                     (.next results)
-                    {:id             (.getId results UInt128/LeastSignificant)
-                     :credits-posted (.getCreditsPosted results)
-                     :debits-posted  (.getDebitsPosted  results)})))))
+                    (let [id             (.getId results UInt128/LeastSignificant)
+                          credits-posted (.getCreditsPosted results)
+                          debits-posted  (.getDebitsPosted  results)]
+                      [:r id {:credits-posted credits-posted
+                              :debits-posted  debits-posted}]))))))
 
 (defn create-transfers
   "Takes a sequence of transfers and creates them in TigerBeetle.

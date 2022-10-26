@@ -31,7 +31,7 @@
     ; no-op
     )
 
-  (invoke! [{:keys [conn node] :as _this} {:keys [accounts] :as _test} {:keys [f value] :as op}]
+  (invoke! [{:keys [conn node] :as _this} _test {:keys [f value] :as op}]
     (assert (= :pool-placeholder conn))
     (let [[idx conn] (tb/rand-tb-client)
           op (assoc op
@@ -55,18 +55,18 @@
                       :else
                       (assoc op :type :ok)))
 
-        :read (let [results (u/timeout tb/tb-timeout :timeout
-                                       (tb/lookup-accounts conn accounts))]
-                (cond
-                  (= :timeout results)
-                  (assoc op
-                         :type  :info
-                         :error :timeout)
+        :txn (let [results (u/timeout tb/tb-timeout :timeout
+                                      (tb/lookup-accounts conn value))]
+               (cond
+                 (= :timeout results)
+                 (assoc op
+                        :type  :info
+                        :error :timeout)
 
-                  :else
-                  (assoc op
-                         :type  :ok
-                         :value results))))))
+                 :else
+                 (assoc op
+                        :type  :ok
+                        :value results))))))
 
   (teardown! [_this _test]
     ; no-op
