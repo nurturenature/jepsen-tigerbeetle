@@ -63,39 +63,37 @@
     ; no-op
     )
 
-  (invoke! [{:keys [conn] :as _this}
+  (invoke! [{:keys [conn node] :as _this}
             _test
             {:keys [f value] :as op}]
     (assert (= :pool-placeholder conn))
-    (let [[idx conn] (tb/rand-tb-client)
-          [k v] value
-          op    (assoc op
-                       :node   (:node conn)
-                       :client idx)]
+    (let [[idx client] (tb/rand-tb-client)
+          [ledger id]  value
+          op           (assoc op
+                              :node   node
+                              :client idx)]
       (case f
-        :add (do
-               (swap! attempted-adds update k (fn [x] (if x
-                                                        (conj x v)
-                                                        #{v})))
-               (let [errors (u/timeout tb/tb-timeout :timeout
-                                       (tb/create-accounts conn [v] k))]
-                 (cond
-                   (= errors :timeout)
-                   (assoc op
-                          :type  :info
-                          :error :timeout)
+        :add (let [_       (swap! attempted-adds update ledger (fn [x] (if x
+                                                                         (conj x id)
+                                                                         #{id})))
+                   value   [[:a id {:ledger ledger}]]
+                   results (u/timeout tb/tb-timeout :timeout
+                                      (tb/create-accounts client value))]
+               (cond
+                 (= results :timeout)
+                 (assoc op
+                        :type  :info
+                        :error :timeout)
 
-                   ; create-accounts only returns failures
-                   (seq errors)
+                 :else
+                 (let [[_:a id {:keys [ledger]}] (first results)]
                    (assoc op
-                          :type  :fail
-                          :error errors)
-
-                   :else
-                   (assoc op :type :ok))))
+                          :type :ok
+                          :value (independent/tuple ledger id)))))
 
         :read (let [results (u/timeout tb/tb-timeout :timeout
-                                       (tb/lookup-accounts conn (get @attempted-adds k)))]
+                                       (tb/lookup-accounts client (->> (get @attempted-adds ledger)
+                                                                       (map (fn [id] [:r id {:ledger ledger}])))))]
                 (cond
                   (= :timeout results)
                   (assoc op
@@ -104,12 +102,12 @@
 
                   :else
                   (let [results (->> results
-                                     (reduce (fn [acc {:keys [id]}]
+                                     (reduce (fn [acc [_:r id _amounts]]
                                                (conj acc id))
                                              (sorted-set)))]
                     (assoc op
                            :type  :ok
-                           :value (independent/tuple k results))))))))
+                           :value (independent/tuple ledger results))))))))
 
   (teardown! [_this _test]
     ; no-op

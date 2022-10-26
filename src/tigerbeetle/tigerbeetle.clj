@@ -121,26 +121,28 @@
     results))
 
 (defn create-accounts
-  "Takes a seq of accounts to create in a TigerBeetle ledger.
-   Returns a lazy sequence of any errors `{account error}`."
-  ([client accounts] (create-accounts client accounts tb-ledger))
-  ([client accounts ledger]
-   (when (seq accounts)
-     (let [batch (AccountBatch. (count accounts))
-           _     (doseq [account accounts]
+  "Takes a seq of `[:a id {account values}]` of accounts to create in a TigerBeetle ledger.
+   Returns a lazy sequence of created accounts."
+  ([client adds]
+   (when (seq adds)
+     (let [batch (AccountBatch. (count adds))
+           _     (doseq [[_:a id {:keys [ledger]}] adds]
                    (.add batch)
-                   (.setId     batch account 0)
+                   (.setId     batch id 0)
                    (.setCode   batch tb-code)
                    (.setLedger batch ledger))
-           errors (.createAccounts client batch)]
-       (repeatedly (.getLength errors)
-                   (fn []
-                     (.next errors)
-                     (let [i (.getIndex errors)
-                           r (.toString (.getResult errors))
-                           a (do (.setPosition batch i)
-                                 (.getId batch UInt128/LeastSignificant))]
-                       {a r})))))))
+           errors (.createAccounts client batch)
+           errors (reduce (fn [acc _]
+                            (.next errors)
+                            (let [i  (.getIndex    errors)
+                                  _  (.setPosition batch i)
+                                  id (.getId batch UInt128/LeastSignificant)]
+                              (conj acc id)))
+                          #{}
+                          (range (.getLength errors)))]
+       (->> adds
+            (remove (fn [[_:a id _values]]
+                      (contains? errors id))))))))
 
 (defn lookup-accounts
   "Takes a sequence of `[:r id nil]` and looks them up in TigerBeetle.

@@ -15,14 +15,12 @@
     [db :as db]
     [tigerbeetle :as tb]]
    [tigerbeetle.workloads
-    [bank :as bank]
     [ledger :as ledger]
     [set-full :as set-full]]))
 
 (def workloads
   "A map of workload names to functions that construct workloads, given opts."
-  {:bank      bank/workload
-   :ledger    ledger/workload
+  {:ledger    ledger/workload
    :set-full  set-full/workload})
 
 (def nemeses
@@ -187,7 +185,7 @@
     :parse-fn parse-long]
 
    ["-w" "--workload NAME" "What workload to run."
-    :default :bank
+    :default :ledger
     :parse-fn keyword
     :validate [workloads (cli/one-of workloads)]]])
 

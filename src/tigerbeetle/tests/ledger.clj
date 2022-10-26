@@ -62,8 +62,8 @@
   "Takes a history from a ledger test and maps it to bank test semantics."
   [history]
   (->> history
-       (map (fn [{:keys [type f value] :as op}]
-              (let [[f _ledger _value] (first value)]
+       (map (fn [{:keys [type value] :as op}]
+              (let [[f _ledger _value] (->> value util/coll first)]
                 (case [type f]
                   ([:invoke :r] [:info :r] [:fail :r])
                   (assoc op :f :read)
