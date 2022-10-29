@@ -22,17 +22,17 @@
   "TigerBeetle."
   [_version]
   (reify db/DB
-    (setup! [this {:keys [tigerbeetle-debug? tigerbeetle-log-level tigerbeetle-update] :as test} node]
+    (setup! [this {:keys [tigerbeetle-debug? tigerbeetle-log-level tigerbeetle-git] :as test} node]
       (let [actions (cond-> {}
-                      (not (cu/exists? tb-dir)) (assoc :git "head"
-                                                       :install true)
-                      (not (cu/file? tb-bin))   (assoc :install true)
-                      tigerbeetle-debug?    (assoc :debug     true
-                                                   :install   true)
-                      tigerbeetle-log-level (assoc :log-level tigerbeetle-log-level
-                                                   :install   true)
-                      tigerbeetle-update    (assoc :git       tigerbeetle-update
-                                                   :install   true))]
+                      (not (cu/exists? tb-dir)) (assoc :git      "head"
+                                                       :install   true)
+                      (not (cu/file? tb-bin))   (assoc :install   true)
+                      tigerbeetle-debug?        (assoc :debug     true
+                                                       :install   true)
+                      tigerbeetle-log-level     (assoc :log-level tigerbeetle-log-level
+                                                       :install   true)
+                      tigerbeetle-git           (assoc :git       tigerbeetle-git
+                                                       :install   true))]
         (when (seq actions)
           (info "Installing TigerBeetle: " actions)
           (deb/install [:git] [:--assume-yes])
@@ -42,7 +42,7 @@
                  (when (not (cu/exists? :.git))
                    (c/exec :git :clone tb-git))
                  (when (:git actions)
-                   (c/exec :git :pull :--no-rebase tb-git :main)
+                   (c/exec :git :reset :--hard :main)
                    (c/exec :git :switch :--detach (:git actions)))
                  (when (:log-level actions)
                    (c/exec :sed :-i
@@ -98,9 +98,14 @@
     ; creating a pool of clients
     (setup-primary! [_db {:keys [accounts] :as test} _node]
       (let [num-clients      (tb/fill-client-pool test)
-            created-accounts (tb/with-tb-client tb/create-accounts (->> accounts
-                                                                        (map (fn [id] [:a id {:ledger tb/tb-ledger}]))))]
-        (info "Created client pool of " num-clients " for accounts " created-accounts)))
+            [client-num
+             concurrency-num
+             client]         (tb/get-tb-client)
+            created-accounts (tb/create-accounts client (->> accounts
+                                                             (map (fn [id] [:a id {:ledger tb/tb-ledger}]))))
+            _ (tb/put-tb-client [client-num concurrency-num client])]
+        (info "Created client pool of " num-clients " connections")
+        (info "Created accounts " created-accounts)))
 
     db/LogFiles
     (log-files [_db _test _node]

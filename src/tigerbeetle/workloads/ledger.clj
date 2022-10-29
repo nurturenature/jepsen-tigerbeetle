@@ -11,37 +11,36 @@
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions
 
+(def attempted-transfers
+  "All attempted transfer txn ids."
+  (atom #{}))
+
 (defrecord LedgerClient [conn]
   client/Client
-  (open! [this {:keys [nodes] :as _test} node]
-    (info "LedgerClient/open (" node "): " (tb/tb-replica-addresses nodes))
-    (let [conn  ; (u/timeout tb/tb-timeout :timeout
-                ;            (tb/new-tb-client nodes))
-          :pool-placeholder]
-      (if (= :timeout conn)
-        (assoc this
-               :conn  :no-client
-               :error :timeout
-               :node  node)
-        (assoc this
-               :conn conn
-               :node node))))
+  (open! [this _test node]
+    (let [[client-num concurrency-num client] (tb/get-tb-client)]
+      (info "LedgerClient/open: " [client-num concurrency-num] " (" node ")")
+      (assoc this
+             :node node
+             :conn client
+             :client-num client-num
+             :concurrency-num concurrency-num)))
 
   (setup! [_this _test]
     ; no-op
     )
 
-  (invoke! [{:keys [conn node] :as _this} _test {:keys [f value] :as op}]
+  (invoke! [{:keys [conn client-num concurrency-num node] :as _this} _test {:keys [f value] :as op}]
     (assert (= :txn f))
-    (assert (= :pool-placeholder conn))
-    (let [[idx client] (tb/rand-tb-client)
-          op (assoc op
+    (let [op (assoc op
                     :node   node
-                    :client idx)
+                    :client [client-num concurrency-num])
           [f _k _v] (first value)]
       (case f
-        :t (let [results (u/timeout tb/tb-timeout :timeout
-                                    (tb/create-transfers client value))]
+        :t (let [_       (doseq [[_:t id _values] value]
+                           (swap! attempted-transfers conj id))
+                 results (u/timeout tb/tb-timeout :timeout
+                                    (tb/create-transfers conn value))]
              (cond
                (= results :timeout)
                (assoc op
@@ -52,7 +51,7 @@
                (assoc op :type :ok :value value)))
 
         :r (let [results (u/timeout tb/tb-timeout :timeout
-                                    (tb/lookup-accounts client value))]
+                                    (tb/lookup-accounts conn value))]
              (cond
                (= :timeout results)
                (assoc op
@@ -62,16 +61,29 @@
                :else
                (assoc op
                       :type  :ok
-                      :value results))))))
+                      :value results)))
+
+        :l-t (let [lookups (->> @attempted-transfers (map (fn [id] [:l-t id nil])))
+                   results (u/timeout tb/tb-timeout :timeout
+                                      (tb/lookup-transfers conn lookups))]
+               (cond
+                 (= :timeout results)
+                 (assoc op
+                        :type  :info
+                        :error :timeout)
+
+                 :else
+                 (assoc op
+                        :type  :ok
+                        :value results))))))
 
   (teardown! [_this _test]
     ; no-op
     )
 
-  (close! [{:keys [conn] :as _this} _test]
-    (assert (= :pool-placeholder conn))
-    ; no-op
-    ))
+  (close! [{:keys [conn client-num concurrency-num] :as this} _test]
+    (tb/put-tb-client [client-num concurrency-num conn])
+    (dissoc this :node :conn :client-num :concurrency-num)))
 
 (defn workload
   "Constructs a workload:

@@ -89,7 +89,7 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ----
 
-## Design Philosophies
+## Implementation Choices
 
 We assume:
   - strict serializability
@@ -97,9 +97,13 @@ We assume:
 
 
 So:
-  - transactions do not have real timeouts
-  - no quiescence at the end of the test before final reads
-
+  - transactions do not have *real* timeouts
+    - but the test must progress so it waits a max 100s
+    - all attempted transactions must be present at end of test
+  - small quiescence at the end of the test, let any active faults clear
+  - final reads
+    - must exist
+    - be equal
 
 ----
 

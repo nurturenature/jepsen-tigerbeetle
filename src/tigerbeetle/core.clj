@@ -41,10 +41,11 @@
    {:nemesis #{:partition}}
    {:nemesis #{:packet}}
    {:nemesis #{:pause}}
-   {:nemesis #{:partition :packet}}
-   {:nemesis #{:partition :pause}}
-   {:nemesis #{:packet :pause}}
-   ;;  {:nemesis #{:kill}}
+   {:nemesis #{:kill}}
+   ;;  {:nemesis #{:partition :packet}}
+   ;;  {:nemesis #{:partition :pause}}
+   ;;  {:nemesis #{:packet :pause}}
+   ;;  {:nemesis #{:kill :packet}}
    ;;  {:nemesis #{:file-corruption}}
    ;;  {:nemesis #{:file-corruption :kill}}
    ])
@@ -78,17 +79,18 @@
 
 (defn test-name
   "Meaningful test name."
-  [{:keys [nodes workload nemesis concurrency
-           tigerbeetle-update tigerbeetle-debug? tigerbeetle-client-max-concurrency] :as opts}]
+  [{:keys [nodes workload nemesis concurrency rate
+           tigerbeetle-git tigerbeetle-debug? tigerbeetle-num-clients tigerbeetle-client-max-concurrency] :as opts}]
   (str "TigerBeetle"
-       " (r" (count nodes) "-"
-       "c" (tb/num-tb-clients opts) (when tigerbeetle-client-max-concurrency (str ":" tigerbeetle-client-max-concurrency)) "-"
-       "w" concurrency ")"
+       " (r" (count nodes)
+       "-c" tigerbeetle-num-clients ":" tigerbeetle-client-max-concurrency
+       "-w" concurrency
+       "-" rate "tps)"
        " " workload
        " " (if (not (seq nemesis))
              (str ":no-faults")
              (str (seq nemesis)))
-       (if tigerbeetle-update (str " :git-" (subs tigerbeetle-update 0 (min 8 (count tigerbeetle-update)))) "")
+       (when tigerbeetle-git (str " :git-" (subs tigerbeetle-git 0 (min 8 (count tigerbeetle-git)))))
        (if tigerbeetle-debug? " :debug" "")))
 
 (defn tigerbeetle-test
@@ -111,9 +113,9 @@
                                                        :correlation  :75%}
                                            :reorder   {:percent      :20%
                                                        :correlation  :75%}}]}
-                  :pause     {:targets (:db-targets opts)}
-                  :kill      {:targets [:one :minority]}          ; (:db-targets opts)}
-                  :file-corruption {:targets     [:one :minority] ;(:db-targets opts)
+                  :pause     {:targets [:one :minority]}          ; (:db-targets opts) 
+                  :kill      {:targets [:one :minority]}          ; (:db-targets opts) 
+                  :file-corruption {:targets     [:one :minority] ; (:db-targets opts)
                                     :corruptions [{:type :bitflip
                                                    :file db/data-dir
                                                    :probability {:distribution :one-of :values [1e-2 1e-3 1e-4]}}
@@ -177,11 +179,7 @@
                (str (cli/one-of nemeses) ", or " (cli/one-of special-nemeses))]]
 
    [nil "--tigerbeetle-num-clients INT" "How many TigerBeetle clients to create and use in a pool."
-    ; :default is --concurrency
-    :parse-fn parse-long]
-
-   [nil "--tigerbeetle-num-workers INT" "How many Jepsen workers to run."
-    ; :default is (count nodes)
+    :default 2
     :parse-fn parse-long]
 
    ["-w" "--workload NAME" "What workload to run."
@@ -198,15 +196,7 @@
                (str (cli/one-of nemeses) ", or " (cli/one-of special-nemeses))]]
 
    [nil "--tigerbeetle-num-clients INT" "How many TigerBeetle clients to create and use in a pool."
-    ; :default is --concurrency
-    :parse-fn parse-comma-longs]
-
-   [nil "--tigerbeetle-num-replicas INT" "How many TigerBeetle replicas in the cluster."
-    ; :default is (count --nodes)
-    :parse-fn parse-comma-longs]
-
-   [nil "--tigerbeetle-num-workers INT" "How many Jepsen workers to run."
-    ; :default is (count nodes)
+    :default (u/coll 2)
     :parse-fn parse-comma-longs]
 
    ["-w" "--workload NAME" "What workload to run."
@@ -248,7 +238,7 @@
     :parse-fn parse-boolean]
 
    [nil "--tigerbeetle-client-max-concurrency INT" "Passed to Client new to configure TigerBeetle client."
-    ; :default nil, use Client defaults
+    :default 32 ; in Client, DEFAULT_MAX_CONCURRENCY = 32
     :parse-fn parse-long]
 
    [nil "--tigerbeetle-debug? BOOLEAN" "Install Tigerbeetle with debugging."
@@ -259,51 +249,28 @@
     ; :default 3 ; 2 is normal, 3 is more logging
     :parse-fn parse-long]
 
-   [nil "--tigerbeetle-update GIT-REVISION" "Update TigerBeetle from git at the revision and install."
-    ; :default "main"
-    ]])
-
-(defn all-tests-inflate
-  "Enhance `(test-all-)cli-opts` for `all-tests`."
-  [{:keys [options] :as parsed}]
-  (let [{:keys [tigerbeetle-num-replicas
-                tigerbeetle-num-clients
-                tigerbeetle-num-workers]} options
-        tigerbeetle-num-replicas (or (u/coll tigerbeetle-num-replicas) [1 3 5])
-        tigerbeetle-num-clients  (or (u/coll tigerbeetle-num-clients)  [1 3 5])
-        tigerbeetle-num-workers  (or (u/coll tigerbeetle-num-workers)  (map (fn [n] (* 3 n)) tigerbeetle-num-clients))]
-    (assoc parsed
-           :options (assoc options
-                           :tigerbeetle-num-replicas tigerbeetle-num-replicas
-                           :tigerbeetle-num-clients  tigerbeetle-num-clients
-                           :tigerbeetle-num-workers  tigerbeetle-num-workers))))
+   [nil "--tigerbeetle-git GIT-REVISION" "Update TigerBeetle from git at the revision and install."]])
 
 (defn all-tests
   "Takes parsed CLI options and constructs a sequence of tests:
      :topology or :workload or :nemesis
    = nil will iterate through all values
    running each configuration :test-count times."
-  [{:keys [nodes workload nemesis test-count tigerbeetle-num-replicas tigerbeetle-num-clients tigerbeetle-num-workers] :as opts}]
+  [{:keys [workload nemesis test-count tigerbeetle-num-clients] :as opts}]
   (let [workloads    (if-let [w workload]
                        (u/coll w)
                        (keys workloads))
         nemeses      (if-let [n nemesis]
                        [{:nemesis n}]
                        test-all-nemeses)
-        num-replicas (u/coll tigerbeetle-num-replicas)
         num-clients  (u/coll tigerbeetle-num-clients)
-        num-workers  (u/coll tigerbeetle-num-workers)
         counts       (range test-count)]
     (for [w workloads
           n nemeses
-          num-replicas num-replicas
           num-clients  num-clients
-          concurrency  num-workers
           _i counts]
       (let [test-map (-> opts
-                         (assoc :nodes (take num-replicas nodes)
-                                :workload w
-                                :concurrency concurrency
+                         (assoc :workload w
                                 :tigerbeetle-num-clients num-clients)
                          (merge n)
                          tigerbeetle-test)]
@@ -318,7 +285,6 @@
                                                          test-cli-opts)})
                    (cli/test-all-cmd    {:tests-fn all-tests
                                          :opt-spec (into cli-opts
-                                                         test-all-cli-opts)
-                                         :opt-fn all-tests-inflate})
+                                                         test-all-cli-opts)})
                    (cli/serve-cmd))
             args))
