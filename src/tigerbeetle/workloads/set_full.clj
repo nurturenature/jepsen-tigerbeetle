@@ -4,7 +4,8 @@
    
    The set key is the ledger.
    The set elements are accounts."
-  (:require [clojure.tools.logging :refer [info]]
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :refer [info]]
             [jepsen
              [checker :as checker]
              [client :as client]
@@ -12,7 +13,8 @@
              [independent :as independent]
              [util :as u]]
             [slingshot.slingshot :refer [throw+]]
-            [tigerbeetle.tigerbeetle :as tb]))
+            [tigerbeetle.tigerbeetle :as tb]
+            [knossos.op :as op]))
 
 ; TODO: use flags.linked for linked transactions
 ; TODO: use flags.pending for pending transactions
@@ -46,39 +48,61 @@
   "All accounts, by ledger, where an attempt was made to add it to TigerBeetle."
   (atom {}))
 
+(defn read-all-invoked-adds
+  "Did final reads read all invoked add values?"
+  []
+  (reify checker/Checker
+    (check [_this _test history _opts]
+      (let [all-invoked-adds (->> history
+                                  (filter (comp #{:add} :f))
+                                  (filter op/invoke?)
+                                  (reduce (fn [acc {:keys [value] :as _op}]
+                                            (conj acc value))
+                                          #{}))
+            final-reads (->> history
+                             (filter (comp #{:read} :f))
+                             (filter op/ok?)
+                             (filter :final?))
+            suspect-final-reads (->> final-reads
+                                     (filter (fn [{:keys [value] :as _op}]
+                                               (seq (set/difference all-invoked-adds value))))
+                                     (map (fn [{:keys [index value] :as _op}]
+                                            [index (set/difference all-invoked-adds value)])))]
+        (merge
+         {:valid? true}
+         (when (seq suspect-final-reads)
+           {:valid? false
+            :suspect-final-reads suspect-final-reads}))))))
+
 (defrecord SetClient [conn]
   client/Client
-  (open! [this {:keys [nodes] :as _test} node]
-    (info "SetClient/open (" node "): " (tb/tb-replica-addresses nodes))
-    (let [conn  ; (u/timeout tb/tb-timeout :timeout
-                ;            (tb/new-tb-client nodes))
-          :pool-placeholder]
-      (if (= :timeout conn)
-        (throw+ [:client-open node :error :timeout])
-        (assoc this
-               :conn conn
-               :node node))))
+  (open! [this _test node]
+    (let [[client-num concurrency-num client] (tb/get-tb-client)]
+      (info "SetClient/open: " [client-num concurrency-num] " (" node ")")
+      (assoc this
+             :node node
+             :conn client
+             :client-num client-num
+             :concurrency-num concurrency-num)))
 
   (setup! [_this _test]
     ; no-op
     )
 
-  (invoke! [{:keys [conn node] :as _this}
+  (invoke! [{:keys [conn client-num concurrency-num node] :as _this}
             _test
             {:keys [f value] :as op}]
-    (assert (= :pool-placeholder conn))
-    (let [[idx client] (tb/rand-tb-client)
-          [ledger id]  value
-          op           (assoc op
-                              :node   node
-                              :client idx)]
+    (let [op (assoc op
+                    :node   node
+                    :client [client-num concurrency-num])
+          [ledger id] value]
       (case f
-        :add (let [_       (swap! attempted-adds update ledger (fn [x] (if x
-                                                                         (conj x id)
-                                                                         #{id})))
+        :add (let [_ (swap! attempted-adds update ledger (fn [x] (if x
+                                                                   (conj x id)
+                                                                   #{id})))
                    value   [[:a id {:ledger ledger}]]
                    results (u/timeout tb/tb-timeout :timeout
-                                      (tb/create-accounts client value))]
+                                      (tb/create-accounts conn value))]
                (cond
                  (= results :timeout)
                  (assoc op
@@ -92,8 +116,8 @@
                           :value (independent/tuple ledger id)))))
 
         :read (let [results (u/timeout tb/tb-timeout :timeout
-                                       (tb/lookup-accounts client (->> (get @attempted-adds ledger)
-                                                                       (map (fn [id] [:r id {:ledger ledger}])))))]
+                                       (tb/lookup-accounts conn (->> (get @attempted-adds ledger)
+                                                                     (map (fn [id] [:r id {:ledger ledger}])))))]
                 (cond
                   (= :timeout results)
                   (assoc op
@@ -113,10 +137,9 @@
     ; no-op
     )
 
-  (close! [{:keys [conn] :as _this} _test]
-    (assert (= :pool-placeholder conn))
-    ; no-op
-    ))
+  (close! [{:keys [conn client-num concurrency-num] :as this} _test]
+    (tb/put-tb-client [client-num concurrency-num conn])
+    (dissoc this :node :conn :client-num :concurrency-num)))
 
 (defn workload
   "Constructs a workload:
@@ -130,11 +153,14 @@
      :total-amount    0
      :client          (SetClient. nil)
      :checker         (independent/checker
-                       (checker/set-full {:linearizable? true}))
+                       (checker/compose
+                        {:set-full              (checker/set-full {:linearizable? true})
+                         :read-all-invoked-adds (read-all-invoked-adds)}))
      :generator       (->> (gen/mix [(adds keys (->> accounts count (+ 1))) (reads keys)])
                            (gen/stagger (/ rate)))
      :final-generator (gen/phases
-                       (gen/log "No quiesce...")
+                       (gen/log "Quiesce...")
+                       (gen/sleep 5)
                        (gen/log "Final reads...")
                        (->> keys
                             (map (fn [k]

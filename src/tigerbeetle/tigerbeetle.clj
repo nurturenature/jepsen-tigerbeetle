@@ -1,5 +1,6 @@
 (ns tigerbeetle.tigerbeetle
-  (:require [clojure.string :refer [join]]
+  (:require [clojure.set :as set]
+            [clojure.string :refer [join]]
             [clojure.tools.logging :refer [info warn]]
             [jepsen
              [util :as u]]
@@ -13,7 +14,7 @@
 
 (def tb-timeout
   "Timeout value in ms for Tigerbeetle transactions."
-  1e+9)
+  100000)
 
 (def tb-cluster
   "TigerBeetle Cluster number."
@@ -78,47 +79,44 @@
    (.close client)
    (catch [] {})))
 
-(defn num-tb-clients
-  "How many TigerBeetle clients should be in this test."
-  [{:keys [tigerbeetle-num-clients concurrency] :as _test}]
-  (or tigerbeetle-num-clients concurrency 3))
-
 (def tb-client-pool
-  "A sorted map, [id client], of TigerBeetle clients as an Atom."
-  (atom (sorted-map)))
+  "A set of `[client-num concurrency-num Client]` TigerBeetle clients as an Atom."
+  (atom #{}))
+
+(defn get-tb-client
+  "Returns a TigerBeetle client from the pool as [client-num concurrency-num client].
+   Clients are multithreaded and may be shared."
+  []
+  (let [[old new] (swap-vals! tb-client-pool (fn [pool]
+                                               (let [client-spec (->> pool seq rand-nth)]
+                                                 (disj pool client-spec))))]
+    (->> (set/difference old new) seq first)))
+
+(defn put-tb-client
+  "Puts a TigerBeetle client into the pool as [client-num concurrency-num client]."
+  [[client-num concurrency-num client]]
+  (swap! tb-client-pool conj [client-num concurrency-num client]))
 
 (defn fill-client-pool
   "Create TigerBeetle clients and put them in the pool.
    Returns the number of clients created."
-  [test]
-  (let [num-clients (num-tb-clients test)]
-    (assert (<= num-clients tb-max-num-clients))
-    (dotimes [i num-clients]
-      (let [client (new-tb-client test)]
-        (when client
-          (swap! tb-client-pool assoc i client))))
-    (count @tb-client-pool)))
+  [{:keys [tigerbeetle-num-clients tigerbeetle-client-max-concurrency] :as test}]
+  (assert (<= tigerbeetle-num-clients tb-max-num-clients))
+  (dotimes [client-num tigerbeetle-num-clients]
+    (let [client (new-tb-client test)]
+      (when client
+        (dotimes [concurrency-num tigerbeetle-client-max-concurrency]
+          (put-tb-client [client-num concurrency-num client])))))
+  (count @tb-client-pool))
 
 (defn drain-client-pool
   "Closes every client and removes it from the pool."
   []
-  (doseq [[idx client] @tb-client-pool]
-    (u/timeout 1000 :timeout (close-tb-client client))
-    (swap! tb-client-pool dissoc idx)))
-
-(defn rand-tb-client
-  "Returns a random TigerBeetle client from the pool as [id client].
-   Clients are multithreaded and may be shared."
-  []
-  (->> @tb-client-pool seq rand-nth))
-
-(defn with-tb-client
-  "Using a random TigerBeetle client,
-   passes it to `(f client & args), and returns the results."
-  [f & args]
-  (let [[_ client] (rand-tb-client)
-        results    (apply f client args)]
-    results))
+  (let [[_client-num concurrency-num client] (get-tb-client)]
+    (when client
+      (when (= 0 concurrency-num)
+        (u/timeout 1000 :timeout (close-tb-client client)))
+      (drain-client-pool))))
 
 (defn create-accounts
   "Takes a seq of `[:a id {account values}]` of accounts to create in a TigerBeetle ledger.
@@ -166,13 +164,13 @@
 
 (defn create-transfers
   "Takes a sequence of 
-   [:t ledger {:id ... :debit-acct ... :credit-acct ...:amount ...}]
+   [:t id {:debit-acct ... :credit-acct ...:amount ...}]
    and creates them in TigerBeetle.
    Returns a lazy sequence of all transfers that were created."
   [client transfers]
   (when (seq transfers)
     (let [batch (TransferBatch. (count transfers))
-          _     (doseq [[_:t ledger {:keys [id debit-acct credit-acct amount]}] transfers]
+          _     (doseq [[_:t id {:keys [debit-acct credit-acct amount]}] transfers]
                   (.add batch)
                   ; TODO: create linked/pending transfers
                   (.setId              batch id 0)
@@ -180,7 +178,7 @@
                   (.setDebitAccountId  batch debit-acct 0)
                   (.setCode            batch tb-code)
                   (.setAmount          batch amount)
-                  (.setLedger          batch ledger))
+                  (.setLedger          batch tb-ledger))
           errors (.createTransfers client batch)
           errors (reduce (fn [acc _]
                            (.next errors)
@@ -191,5 +189,25 @@
                          #{}
                          (range (.getLength errors)))]
       (->> transfers
-           (remove (fn [[_:t _ledger {:keys [id]}]]
+           (remove (fn [[_:t id _value]]
                      (contains? errors id)))))))
+
+(defn lookup-transfers
+  "Takes a sequence of `[:l-t id nil]` and looks them up in TigerBeetle.
+   Returns a lazy sequence of `[:l-t id {:debit-acct ... :credit-acct ...:amount ...}]`
+   for the transfers that were found."
+  [client lookups]
+  (when (seq lookups)
+    (let [batch (IdBatch. (count lookups))
+          _     (doseq [[_:l-t id _nil] lookups]
+                  (.add batch)
+                  (.setId batch id 0))
+          results (.lookupTransfers client batch)]
+      (repeatedly (.getLength results)
+                  (fn []
+                    (.next results)
+                    (let [id          (.getId              results UInt128/LeastSignificant)
+                          debit-acct  (.getDebitAccountId  results UInt128/LeastSignificant)
+                          credit-acct (.getCreditAccountId results UInt128/LeastSignificant)
+                          amount      (.getAmount          results)]
+                      [:l-t id {:debit-acct debit-acct :credit-acct credit-acct :amount amount}]))))))

@@ -1,19 +1,32 @@
 (ns tigerbeetle.tests.ledger
   "An assumed strict serializable ledger test."
   (:refer-clojure :exclude [read test])
-  (:require [knossos.op :as op]
-            [clojure.core.reducers :as r]
+  (:require [clojure.core.reducers :as r]
+            [clojure.tools.logging :refer [info]]
+            [clojure.set :as set]
             [jepsen
              [checker :as checker]
              [generator :as gen] [store :as store]
              [util :as util]]
             [jepsen.checker.perf :as perf]
-            [knossos.history :as history]
-            [gnuplot.core :as g]
-            [tigerbeetle.tigerbeetle :as tb]))
+            [knossos
+             [op :as op]
+             [history :as history]]
+            [gnuplot.core :as g]))
+
+(defn op->txn-f
+  "Takes an op and returns the first :f in the :txn :value."
+  [{:keys [value] :as _op}]
+  (let [[f _id _values] (->> value util/coll first)]
+    f))
+
+(def transfer-id
+  "Most recent transfer id used."
+  (atom 0))
 
 (def reads
-  "A generator of read operations."
+  "A generator of read operations.
+   Reads all accounts in a single txn."
   (fn [{:keys [accounts] :as _test} _ctx]
     (let [rs (->> accounts
                   (map (fn [acct]
@@ -21,6 +34,14 @@
       {:type  :invoke
        :f     :txn
        :value rs})))
+
+(def lookup-transfers
+  "A generator of lookup transfers operations.
+   Reads all transfers in a single txn."
+  (fn [_test _ctx]
+    {:type  :invoke
+     :f     :txn
+     :value [[:l-t nil nil]]}))
 
 (def transfers
   "Generator of transfer operations:
@@ -33,13 +54,12 @@
                              credit-acct
                              (diff-acct)))))
           amount (util/rand-distribution {:min 1 :max (+ 1 max-transfer)})
-          id     (util/rand-distribution {:min 1})]
+          id     (swap! transfer-id + 1)]
       {:type  :invoke
        :f     :txn
-       :value [[:t tb/tb-ledger {:id          id
-                                 :debit-acct  debit-acct
-                                 :credit-acct credit-acct
-                                 :amount      amount}]]})))
+       :value [[:t id {:debit-acct  debit-acct
+                       :credit-acct credit-acct
+                       :amount      amount}]]})))
 
 (defn generator
   "A mixture of reads and transfers for clients."
@@ -47,12 +67,20 @@
   (gen/mix [reads transfers]))
 
 (defn final-generator
-  "A generator that does a `:final? true` read on each worker."
+  "A generator that does a `:final? true` read,
+   and a `:l-t`, lookup all attempted transfers, on each worker."
   []
   (gen/phases
-   (gen/log "No quiesce...")
+   (gen/log "Quiesce...")
+   (gen/sleep 5)
    (gen/log "Final reads...")
    (->> reads
+        (gen/map (fn [op] (assoc op :final? true)))
+        (gen/once)
+        (gen/each-thread)
+        (gen/clients))
+   (gen/log "Final lookup all transfers...")
+   (->> lookup-transfers
         (gen/map (fn [op] (assoc op :final? true)))
         (gen/once)
         (gen/each-thread)
@@ -62,21 +90,28 @@
   "Takes a history from a ledger test and maps it to bank test semantics."
   [history]
   (->> history
-       (map (fn [{:keys [type value] :as op}]
-              (let [[f _ledger _value] (->> value util/coll first)]
-                (case [type f]
-                  ([:invoke :r] [:info :r] [:fail :r])
-                  (assoc op :f :read)
+       (map (fn [{:keys [type value process] :as op}]
+              (if (int? process)
+                (let [[f _ledger _value] (->> value first)]
+                  (case [type f]
+                    ([:invoke :r] [:info :r] [:fail :r])
+                    (assoc op :f :read)
 
-                  [:ok :r]
-                  (let [value  (->> value
-                                    (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
-                                              (assoc acc id (- credits-posted debits-posted)))
-                                            {}))]
-                    (assoc op :f :read :value value))
+                    [:ok :r]
+                    (let [value  (->> value
+                                      (reduce (fn [acc [_:r id {:keys [debits-posted credits-posted]}]]
+                                                (assoc acc id (- credits-posted debits-posted)))
+                                              {}))]
+                      (assoc op :f :read :value value))
 
-                  ([:invoke :t] [:ok :t] [:info :t] [:fail :t])
-                  (assoc op :f :transfer)))))))
+                    ([:invoke :t] [:ok :t] [:info :t] [:fail :t])
+                    (assoc op :f :transfer)
+
+                    ([:invoke :l-t] [:ok :l-t] [:info :l-t] [:fail :l-t])
+                    nil))
+                ; :process :nemesis, etc
+                op)))
+       (remove nil?)))
 
 (defn err-badness
   "Takes a bank error and returns a number, depending on its type. Bigger
@@ -166,20 +201,12 @@
   []
   (reify checker/Checker
     (check [_this _test history _opts]
-      (let [pair-index+ (->> history history/pair-index+)
+      (let [history     (->> history (remove #(not (int? (:process %)))))
             end-time    (->> history last :time)
             open-ops (history/unmatched-invokes history)
             opens    (->> open-ops
                           (map (fn [{:keys [time] :as op}]
                                  [(util/nanos->ms (- end-time time)) op]))
-                          (into [])
-                          rseq)
-            info-ops (->> history (filter op/info?))
-            infos    (->> info-ops
-                          (map (fn [op]
-                                 (let [start (:time (history/invocation pair-index+ op))
-                                       end   (:time op)]
-                                   [(util/nanos->ms (- end start)) op])))
                           (into [])
                           rseq)
             fails (->> history (filter op/fail?))]
@@ -188,31 +215,71 @@
          (when (seq opens)
            {:valid? :unknown
             :open-ops opens})
-         (when (seq infos)
-           {:valid? :unknown
-            :info-ops infos})
          (when (seq fails)
            {:valid? :unknown
             :fail-ops fails}))))))
 
-(defn final-reads
-  "Insures all final reads are equal."
+(defn lookup-all-invoked-transfers
+  "Did final lookup transfers read all invoked transfers?"
   []
   (reify checker/Checker
     (check [_this _test history _opts]
-      (let [history (->> history (ledger->bank))
-            unique-finals (->> history
-                               (filter (comp #{:read} :f))
+      (let [history (->> history
+                         (filter (comp int? :process)))
+            all-invoked-transfers (->> history
+                                       (filter (comp #{:t} op->txn-f))
+                                       (filter op/invoke?)
+                                       (reduce (fn [acc {:keys [value] :as _op}]
+                                                 (->> value (reduce (fn [acc [_:t id _values]]
+                                                                      (conj acc id))
+                                                                    acc)))
+                                               #{}))
+            final-lookups (->> history
+                               (filter (comp #{:l-t} op->txn-f))
                                (filter op/ok?)
-                               (filter :final?)
-                               (group-by :value)
-                               (map (fn [[v ops]]
-                                      {:value v :reads (count ops)})))]
+                               (filter :final?))
+            suspect-final-lookups (->> final-lookups
+                                       (filter (fn [{:keys [value] :as _op}]
+                                                 (let [ids (->> value
+                                                                (reduce (fn [acc [_:l-t id _values]]
+                                                                          (conj acc id))
+                                                                        #{}))]
+                                                   (seq (set/difference all-invoked-transfers ids))))))]
         (merge
          {:valid? true}
-         (when (< 1 (count unique-finals))
+         (when (seq suspect-final-lookups)
            {:valid? false
-            :open-ops unique-finals}))))))
+            :suspect-final-lookups suspect-final-lookups}))))))
+
+(defn final-reads
+  "Insures that final reads
+   - exist
+   - are equal"
+  []
+  (reify checker/Checker
+    (check [_this _test history _opts]
+      (let [history (->> history
+                         (filter (comp int? :process)))
+            unique-final-reads (->> history
+                                    (filter (comp #{:r} op->txn-f))
+                                    (filter op/ok?)
+                                    (filter :final?)
+                                    (map :value)
+                                    set)
+            unique-final-lookups (->> history
+                                      (filter (comp #{:l-t} op->txn-f))
+                                      (filter op/ok?)
+                                      (filter :final?)
+                                      (map :value)
+                                      set)]
+        (merge
+         {:valid? true}
+         (when (not= 1 (count unique-final-reads))
+           {:valid? false
+            :unequal-final-reads unique-final-reads})
+         (when (not= 1 (count unique-final-lookups))
+           {:valid? false
+            :unequal-final-lookups unique-final-lookups}))))))
 
 (defn ok-reads
   "Filters a history to just OK reads. Returns nil if there are none."
@@ -295,7 +362,8 @@
      (merge opts
             {:checker (checker/compose {:SI   (checker opts)
                                         :plot (plotter)
-                                        :unexpected-ops (unexpected-ops)
-                                        :final-reads (final-reads)})
+                                        :lookup-transfers (lookup-all-invoked-transfers)
+                                        :final-reads (final-reads)
+                                        :unexpected-ops (unexpected-ops)})
              :generator       (generator)
              :final-generator (final-generator)}))))
