@@ -12,8 +12,8 @@
    [jepsen.nemesis.combined :as nc]
    [jepsen.os.debian :as debian]
    [tigerbeetle
-    [db :as db]
-    [tigerbeetle :as tb]]
+    [db :as db]]
+   [tigerbeetle.checker.perf :as perf]
    [tigerbeetle.workloads
     [ledger :as ledger]
     [set-full :as set-full]]))
@@ -138,7 +138,7 @@
             :generator  (combine-workload-package-generators opts workload package)
             :checker    (checker/compose
                          {:workload   (:checker workload)
-                          :perf       (checker/perf
+                          :perf       (perf/perf
                                        {:nemeses (:perf package)})
                           :timeline   (timeline/html)
                           :stats      (checker/stats)

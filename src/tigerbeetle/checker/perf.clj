@@ -1,4 +1,4 @@
-(ns jepsen.checker.perf
+(ns tigerbeetle.checker.perf
   "Supporting functions for performance analysis."
   (:require [clojure.stacktrace :as trace]
             [fipp.edn :refer [pprint]]
@@ -6,6 +6,7 @@
             [clojure.set :as set]
             [clojure.java.io :as io]
             [clojure.tools.logging :refer [info warn]]
+            [jepsen.checker :as checker]
             [jepsen.util :as util]
             [jepsen.store :as store]
             [multiset.core :as multiset]
@@ -35,7 +36,7 @@
   each bucket."
   ([dt]
    (->> (iterate inc 0)
-       (map (partial bucket-scale dt))))
+        (map (partial bucket-scale dt))))
   ([dt tmax]
    (take-while (partial >= tmax) (buckets dt))))
 
@@ -244,28 +245,28 @@
   [plot nemeses]
   (->> nemeses
        (map-indexed
-         (fn [i n]
-           (let [color           (or (:fill-color n)
-                                     (:color n)
-                                     default-nemesis-color)
-                 transparency    (:transparency n nemesis-alpha)
-                 graph-top-edge  1
+        (fn [i n]
+          (let [color           (or (:fill-color n)
+                                    (:color n)
+                                    default-nemesis-color)
+                transparency    (:transparency n nemesis-alpha)
+                graph-top-edge  1
                  ; Divide our y-axis space into twelfths
-                 height          0.0834
-                 padding         0.00615
-                 bot             (- graph-top-edge
-                                    (* height (inc i)))
-                 top             (+ bot height)]
-             (->> (:intervals n)
-                  (map interval->times)
-                  (map (fn [[start stop]]
-                         [:set :obj :rect
-                          :from (g/list start [:graph (+ bot padding)])
-                          :to   (g/list (or stop [:graph 1])
-                                        [:graph (- top padding)])
-                          :fillcolor :rgb color
-                          :fillstyle :transparent :solid transparency
-                          :noborder]))))))
+                height          0.0834
+                padding         0.00615
+                bot             (- graph-top-edge
+                                   (* height (inc i)))
+                top             (+ bot height)]
+            (->> (:intervals n)
+                 (map interval->times)
+                 (map (fn [[start stop]]
+                        [:set :obj :rect
+                         :from (g/list start [:graph (+ bot padding)])
+                         :to   (g/list (or stop [:graph 1])
+                                       [:graph (- top padding)])
+                         :fillcolor :rgb color
+                         :fillstyle :transparent :solid transparency
+                         :noborder]))))))
        (reduce concat)))
 
 (defn nemesis-lines
@@ -321,7 +322,7 @@
     (-> plot
         (update :series   concat (nemesis-series  plot nemeses))
         (update :preamble concat (nemesis-regions plot nemeses)
-                                 (nemesis-lines   plot nemeses)))))
+                (nemesis-lines   plot nemeses)))))
 
 (defn preamble
   "Shared gnuplot preamble"
@@ -377,10 +378,10 @@
                            :plot plot}))
         [x0 y0] (first data)
         [xmin xmax ymin ymax] (reduce (fn [[xmin xmax ymin ymax] [x y :as pair]]
-                                             [(min xmin x)
-                                              (max xmax x)
-                                              (min ymin y)
-                                              (max ymax y)])
+                                        [(min xmin x)
+                                         (max xmax x)
+                                         (min ymin y)
+                                         (max ymax y)])
                                       [x0 x0 y0 y0]
                                       data)
         xrange (broaden-range [xmin xmax])
@@ -515,7 +516,7 @@
   [test history {:keys [subdirectory nemeses]}]
   (let [nemeses     (or nemeses (:nemeses (:plot test)))
         history     (util/history->latencies history)
-        dt          30
+        dt          1
         qs          [0.5 0.95 0.99 1]
         datasets    (->> history
                          invokes-by-f
@@ -560,7 +561,7 @@
   "Writes a plot of operation rate by their completion times."
   [test history {:keys [subdirectory nemeses]}]
   (let [nemeses     (or nemeses (:nemeses (:plot test)))
-        dt          10
+        dt          1
         td          (double (/ dt))
         t-max       (->> history (r/map :time) (reduce max 0) util/nanos->secs)
         datasets    (->> history
@@ -583,17 +584,125 @@
                                                     "rate.png"))
 
         preamble (rate-preamble test output-path)
-        series   (for [f fs, t types]
-                   {:title     (str (util/name+ f) " " (name t))
-                    :with      'linespoints
-                    :linetype  (type->color t)
-                    :pointtype (fs->points- f)
-                    :data      (let [m (get-in datasets [f t])]
-                                 (map (juxt identity #(get m % 0))
-                                      (buckets dt t-max)))})]
+        series   (->> (for [f fs, t types]
+                        (when-let [data (get-in datasets [f t])]
+                          {:title     (str (util/name+ f) " " (name t))
+                           :with      'linespoints
+                           :linetype  (type->color t)
+                           :pointtype (fs->points- f)
+                           :data      (map (juxt identity #(get data % 0))
+                                           (buckets dt t-max))}))
+                      (remove nil?))]
     (-> {:preamble  preamble
          :series    series}
         (with-range)
         (with-nemeses history nemeses)
         plot!
         (try+ (catch [:type ::no-points] _ :no-points)))))
+
+(defn open-ops-preamble
+  "Gnuplot commands for setting up an open ops plot."
+  [test output-path]
+  (concat (preamble output-path)
+          [[:set :title (str (:name test) " open ops")]]
+          '[[set ylabel "Open Ops"]]))
+
+(defn open-ops-graph!
+  "Writes a plot of open operations by time."
+  [test history {:keys [subdirectory nemeses]}]
+  (let [nemeses     (or nemeses (:nemeses (:plot test)))
+        dt          1
+        td          (double (/ dt))
+        t-max       (->> history (r/map :time) (reduce max 0) util/nanos->secs)
+        history+     (->> history (history/pair-index+))
+        [datasets _] (->> history
+                          ; Don't graph nemeses
+                          (r/filter (comp integer? :process))
+                          ; Compute open/close ops
+                          (reduce (fn [[m open-totals] {:keys [type f time] :as op}]
+                                    (let [outcome    (->> op (history/completion history+) :type)
+                                          open-total (get-in open-totals [f outcome] 0)
+                                          open-total (case type
+                                                       :invoke           (+ open-total 1)
+                                                       (:ok :info :fail) (- open-total 1))]
+                                      [(assoc-in m [f
+                                                    outcome
+                                                    (bucket-time dt
+                                                                 (util/nanos->secs time))]
+                                                 open-total)
+                                       (assoc-in open-totals [f outcome] open-total)]))
+                                  [{} {}]))
+        fs          (util/polysort (keys datasets))
+        fs->points- (fs->points fs)
+        output-path (.getCanonicalPath (store/path! test
+                                                    subdirectory
+                                                    "open-ops.png"))
+
+        preamble (open-ops-preamble test output-path)
+        series   (->> (for [f fs t types]
+                        (when-let [data (get-in datasets [f t])]
+                          (let [[data _] (->> (buckets dt t-max)
+                                              (reduce (fn [[acc curr] bt]
+                                                        (let [curr (or (get data bt) curr)]
+                                                          [(assoc acc bt curr) curr]))
+                                                      [{} 0]))]
+                            {:title     (str (util/name+ f) " " (name t))
+                             :with      'linespoints
+                             :linetype  (type->color t)
+                             :pointtype (fs->points- f)
+                             :data      (map (juxt identity #(get data % 0))
+                                             (buckets dt t-max))})))
+                      (remove nil?))]
+    (-> {:preamble  preamble
+         :series    series}
+        (with-range)
+        (with-nemeses history nemeses)
+        plot!
+        (try+ (catch [:type ::no-points] _ :no-points)))))
+
+(defn latency-graph
+  "Spits out graphs of latencies. Checker options take precedence over
+  those passed in with this constructor."
+  ([]
+   (latency-graph {}))
+  ([opts]
+   (reify checker/Checker
+     (check [_ test history c-opts]
+       (let [o (merge opts c-opts)]
+         (point-graph!     test history o)
+         (quantiles-graph! test history o)
+         {:valid? true})))))
+
+(defn rate-graph
+  "Spits out graphs of throughput over time. Checker options take precedence
+  over those passed in with this constructor."
+  ([]
+   (rate-graph {}))
+  ([opts]
+   (reify checker/Checker
+     (check [_ test history c-opts]
+       (let [o (merge opts c-opts)]
+         (rate-graph! test history o)
+         {:valid? true})))))
+
+(defn open-ops-graph
+  "Spits out graphs of open ops over time. Checker options take precedence
+  over those passed in with this constructor."
+  ([]
+   (open-ops-graph {}))
+  ([opts]
+   (reify checker/Checker
+     (check [_ test history c-opts]
+       (let [o (merge opts c-opts)]
+         (open-ops-graph! test history o)
+         {:valid? true})))))
+
+(defn perf
+  "Composes various performance statistics. Checker options take precedence over
+  those passed in with this constructor."
+  ([]
+   (perf {}))
+  ([opts]
+   (checker/compose {:latency-graph  (latency-graph  opts)
+                     :rate-graph     (rate-graph     opts)
+                     :open-ops-graph (open-ops-graph opts)})))
