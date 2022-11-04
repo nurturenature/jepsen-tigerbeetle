@@ -53,12 +53,12 @@
 (def partition-targets
   "Valid targets for partition nemesis operations."
   ; #{:majority :minority-third :one :majorities-ring :primaries}
-  #{:one :majority :majorities-ring})
+  #{:one :majority :majorities-ring :primaries})
 
 (def db-targets
   "Valid targets for DB nemesis operations."
   ; #{:one :primaries :minority-third :minority :majority :all}
-  #{:one :minority :majority :all})
+  #{:one :minority :majority :all :primaries})
 
 (defn combine-workload-package-generators
   "Constructs a test generator by combining workload and package generators
@@ -113,8 +113,8 @@
                                                        :correlation  :75%}
                                            :reorder   {:percent      :20%
                                                        :correlation  :75%}}]}
-                  :pause     {:targets [:one :minority]}          ; (:db-targets opts) 
-                  :kill      {:targets [:one :minority]}          ; (:db-targets opts) 
+                  :pause     {:targets (:db-targets opts)}
+                  :kill      {:targets (:db-targets opts)}
                   :file-corruption {:targets     [:one :minority] ; (:db-targets opts)
                                     :corruptions [{:type :bitflip
                                                    :file db/data-dir
