@@ -1,11 +1,14 @@
 (ns tigerbeetle.db
-  (:require [clojure.tools.logging :refer [info warn]]
+  (:require [clojure.string :refer [split-lines]]
+            [clojure.tools.logging :refer [info warn]]
             [jepsen
              [db :as db]
-             [control :as c]]
+             [control :as c]
+             [util :as u]]
             [jepsen.control
              [util :as cu]]
             [jepsen.os.debian :as deb]
+            [slingshot.slingshot :refer [try+]]
             [tigerbeetle.tigerbeetle :as tb]))
 
 (def root     "/root")
@@ -86,12 +89,28 @@
 
       (warn "Leaving TigerBeetle source, build, at: " tb-dir))
 
-    ; TODO
     ; TigerBeetle doesn't have "primaries".
-    ; We'll use them to mean "leader'."
+    ; We'll use them to mean "leader".
+    ; Look in log file on each node for leader view changes.
+    ; Select highest.
     db/Primary
     (primaries [_db test]
-      (:nodes test))
+      (->> (c/on-nodes test (fn [_test node]
+                              (let [[_match view] (try+
+                                                   (->> (c/exec :grep :-E " view=([[:digit:]]+) leader" log-path)
+                                                        (split-lines)
+                                                        (last)
+                                                        (re-find #" view=(\d+) leader$"))
+                                                   (catch [:exit 1] {}
+                                                     ; not found
+                                                     [nil nil]))
+                                    view          (when view (parse-long view))]
+                                (info "Leader view on " node " : " view)
+                                view)))
+           (sort-by val)
+           (last)
+           (key)
+           (u/coll)))
 
     ; TigerBeetle doesn't have "primaries".
     ; Used to initialize database by setting up accounts,

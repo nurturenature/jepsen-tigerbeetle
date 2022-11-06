@@ -10,8 +10,8 @@
              [util :as util]]
             [jepsen.checker.perf :as perf]
             [knossos
-             [op :as op]
-             [history :as history]]
+             [history :as history]
+             [op :as op]]
             [gnuplot.core :as g]))
 
 (defn op->txn-f

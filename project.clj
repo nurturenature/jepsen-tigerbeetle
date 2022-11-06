@@ -5,8 +5,7 @@
             :url "http://www.apache.org/licenses/LICENSE-2.0"}
   :dependencies [[com.tigerbeetle/tigerbeetle-java "0.0.1-SNAPSHOT"]
                  [org.clojure/clojure "1.11.1"]
-                 [jepsen "0.2.8-SNAPSHOT"]
-                 [jellepsen "0.0.1-SNAPSHOT"]]
+                 [jepsen "0.2.8-SNAPSHOT"]]
   :main tigerbeetle.core
   :repl-options {:init-ns tigerbeetle.core}
   :plugins [[lein-codox "0.10.8"]
