@@ -89,25 +89,47 @@ TigerBeetle [is designed](https://tigerbeetle.com/index.html#home_safety) for [s
 
 ----
 
-## Implementation Choices
+## Current Status
 
-We assume:
-  - strict serializability
-  - deterministic outcome
+### Leader-Stalker Nemesis 😈
 
+Tests can target the leader for faults.
+Leadership can be like that :-).
 
-So:
-  - transactions do not have *real* timeouts
-    - but the test must progress so it waits a max 100s
-    - all attempted transactions must be present at end of test
-  - small quiescence at the end of the test, let any active faults clear
-  - final reads
-    - must exist
-    - be equal
+Leader is determined by examining the logs for leadership view changes.
+
+```clj
+[jepsen node n1] Leader view on  n1  :  12
+[jepsen node n2] Leader view on  n2  :  10
+[jepsen node n3] Leader view on  n3  :  11
+:nemesis :info :start-partition [:isolated {"n1" #{"n2",  "n3"}, "n2" #{"n1"}, "n3" #{"n1"}}]
+```
+
+### Panics
+
+Leader partitioning is finding a new, to us, panic:
+
+```zig
+ring_buffer.zig:137:38: 0x3327e8 in ring_buffer.RingBuffer(vsr.replica.Prepare,32,ring_buffer.enum:10:27.array).push_assume_capacity (tigerbeetle)
+                error.NoSpaceLeft => unreachable,
+                                     ^
+```
+
+### False Panics
+
+When cluster loses quorum, can inappropriately panic, IOW:
+  - \# client sessions <= client count * client max concurrent  
+yet:
+
+```
+thread 91174 panic: session evicted: too many concurrent client sessions
+```
+
+### We'll check back after continuing to enhance the tests...
 
 ----
 
-## Current Status
+## Experience Log
 
 ### Long running no fault tests are now long running. ⏳ 💤
 
@@ -126,11 +148,7 @@ The experience prompted looking up the etymology of deterministic:
 >  
 > from terminus boundary, limit
 
-### We'll check back after enhancing the usage and configuration of the Java client in preparation of more explicit scenarios...
-
 ----
-
-## Experience Log
 
 ### And these are known issues already identified by the LSM fuzzer. Tests were running against prior commits. 😔
 
