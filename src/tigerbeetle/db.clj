@@ -103,7 +103,8 @@
                                                         (re-find #" view=(\d+) leader$"))
                                                    (catch [:exit 1] {}
                                                      ; not found
-                                                     [nil nil]))]
+                                                     [nil nil]))
+                                    view          (when view (parse-long view))]
                                 (info "Leader view on " node " : " view)
                                 view)))
            (sort-by val)
