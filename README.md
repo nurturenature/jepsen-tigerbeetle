@@ -1,5 +1,13 @@
 # `jepsen-tigerbeetle`
 
+----
+
+## This repository is significantly out of date and has been archived.
+
+## See the official Jepsen [test](https://github.com/jepsen-io/tigerbeetle) and [report](https://jepsen.io/analyses/tigerbeetle-0.16.11) from 2025-06-06.
+
+----
+
 ### A [Jepsen](https://github.com/jepsen-io/jepsen) Test for [TigerBeetle](https://github.com/tigerbeetledb/tigerbeetle).
 
 ## Why TigerBeetle?
